@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
+#include <vector>
 using namespace std;
 #define CHECK(res) if(res!=cudaSuccess){exit(-1);}
 __global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
@@ -11,58 +12,83 @@ __global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
     // Coss_dosp<input> the disprity coss of the left and right image
     // cols<input> the number of  each row's whole point
     // D is the nums of every point's disp range
+    // the first point as the L(p,d) init
+    // range from 28 to 1051
     int tid=threadIdx.x;
-    // start Aggregation
-    for(int i=0;i<cols;i++)
-        for(int j=0;j<D;j++){
-            res[tid][i][j]=Coss_disp[tid][i][j];
+    res[tid+28][0]=Coss_disp[tid+28][0];
+    for(int i=1;i<cols;i++) { // point index start 1:cols-1
+        // step 1 find the min cost in the L(p-1,i) // i stand the D range
+        float min_lpd=res[tid+28][i-1][0];
+        for(int m=1;m<D;m++){
+            if(res[tid+28][i-1][m]<min_lpd)
+                min_lpd=res[tid+28][i-1][m];
         }
+        // step 2 compute different disp aggregation
+        for (int j = 0; j < D; j++) { // Disp
+
+            res[tid + 28][i][j] = Coss_disp[tid][i][j];
+        }
+    }
 }
 
-extern "C" int cuda_main()
+extern "C" int cuda_main(vector<vector<vector<float_t> > > cost_disp)
 {
-    int rows;
-    int cols;
-    int D;
-    __device__ float ***res;
+    int rows;  // cost_disp  first point
+    int cols;  // second
+    int D;     // third
     ////////////////////  data init //////////////////////////////
-    double ***f_3 = (double***)malloc(rows * sizeof(double***));
-    double **f_2 = (double**)malloc(rows * cols * sizeof(double**));
-    double *f_1 = (double*)malloc(rows*cols * D * sizeof(double*));
+    float ***f_3 = (float***)malloc(rows * sizeof(float***));
+    float ***res_3 = (float***)malloc(rows * sizeof(float***));
+    float **f_2 = (float**)malloc(rows * cols * sizeof(float**));
+    float **res_2 = (float**)malloc(rows * cols * sizeof(float**));
+    float *f_1 = (float*)malloc(rows*cols * D * sizeof(float*));
+    float *res_1 = (float*)malloc(rows*cols * D * sizeof(float*));
 
-    double ***d_3;
-    cudaMalloc((void**)(&d_3), rows * sizeof(double***));
-    double **d_2;
-    cudaMalloc((void**)(&d_2), rows*cols * sizeof(double**));
-    double *d_1;
-    cudaMalloc((void**)(&d_1), rows*cols * D * sizeof(double));
+    float ***d_res_3;  // result disp after aggregation
+    float ***d_3;      // initional disp
+    cudaMalloc((void**)(&d_3), rows * sizeof(float***));
+    cudaMalloc((void**)(&d_res_3), rows * sizeof(float***));
+    float **d_2;
+    float **d_res_2;
+    cudaMalloc((void**)(&d_2), rows*cols * sizeof(float**));
+    cudaMalloc((void**)(&d_res_2), rows*cols * sizeof(float**));
+    float *d_1;
+    float *d_res_1;
+    cudaMalloc((void**)(&d_1), rows*cols * D * sizeof(float));
+    cudaMalloc((void**)(&d_res_1), rows*cols * D * sizeof(float));
 
-    for (int i = 0; i < rows*cols * D; i++)// ini the data 3D
-    {
-        f_1[i] = 0;
+//    for (int i = 0; i < rows*cols * D; i++)// ini the data 3D
+//    {
+//        f_1[i] = 0;
+//    }
+    int index=0;
+    for(int i=0;i<rows;i++){
+        for(int j=0;i<cols;j++){
+            for(int k=0;k<D;k++){
+                f_1[index++]=cost_disp[i][j][k];
+            }
+        }
     }
-    cudaMemcpy(d_1, f_1, rows*cols * D * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_1, f_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
     for (int i = 0; i < rows*cols ; i++)
     {
         f_2[i] = d_1 + i * D;
+        res_2[i] = d_res_1 + i * D;
     }
-    cudaMemcpy(d_2, f_2, rows*cols * sizeof(double**), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_2, f_2, rows*cols * sizeof(float**), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_res_2, res_2, rows*cols * sizeof(float**), cudaMemcpyHostToDevice);
     for (int i = 0; i < rows; i++)
     {
         f_3[i] = d_2 + cols * i;
+        res_3[i] = d_res_2 + cols * i;
     }
-    cudaMemcpy(d_3, f_3, rows * sizeof(double***), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_3, f_3, rows * sizeof(float***), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_res_3, res_3, rows * sizeof(float***), cudaMemcpyHostToDevice);
+    //////////////////////////// end /////////////////////////
 
-    /////////////////////////////////////////////////////
-    // malloc the result space on device
-    float ***Agg_res;
-    cudaMalloc((void**)&res, sizeof(int **) * rows); // int **
-    // malloc the host space val
-    float ***Coss_Host;  // Host 3 dim vector coss_disp
-    Coss_Host=(float***)malloc(sizeof(int*)*rows);
     // def keral   left aggregation;
     dim3 grid(1);
     dim3 block(1024);
-    AggreKeral_left<<<grid,block>>>(Coss_Host,res,cols,D);
+    AggreKeral_left<<<grid,block>>>(d_3,d_res_3,cols,D);
     return 0;
 }

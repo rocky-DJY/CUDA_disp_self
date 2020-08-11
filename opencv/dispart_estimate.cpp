@@ -48,7 +48,7 @@ void dispart_estimate::compute_disp(cv::Mat &census_left, cv::Mat &census_right)
 		}
 		cost_res.push_back(cost_rows);
 	}
- 	cout<<"cost size: "<<cost_res[0][0].size()<<endl;
+ 	//cout<<"cost size: "<<cost_res[0][0].size()<<endl;
 	// 代价聚合(选出最优的视差值)
 
 	// 视差计算
