@@ -9,7 +9,7 @@ census::~census() {
 void census::census_transform(cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey) {
 		int image_height = input_image.rows;
 		int image_width = input_image.cols;
-		modified_image = cv::Mat::zeros(image_height, image_width, CV_64F);
+		modified_image = cv::Mat::zeros(image_height, image_width, CV_64F);  // 64   census result
 		//-----------   census±ä»»     -------------//
 		int offsetx = (window_sizex - 1) / 2;
 		int offsety = (window_sizey - 1) / 2;
