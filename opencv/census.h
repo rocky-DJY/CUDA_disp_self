@@ -13,7 +13,7 @@ class census
 public:
 	census(int id);
 	// census ±‰ªª
-	void census_transform(cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey);
+	void census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey);
 	// ∫∫√˜æ‡¿Îº∆À„
 	unsigned char census_hanming_dist(long long PL, long long PR);
 	~census();

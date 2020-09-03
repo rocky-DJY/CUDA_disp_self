@@ -54,40 +54,26 @@ int DispMain() {
                 // Retrieve the left image, depth image in half-resolution
                 zed.retrieveImage(image_zed_undistort_left, VIEW::LEFT, MEM::CPU, new_image_size);
                 zed.retrieveImage(image_zed_undistort_right, VIEW::RIGHT, MEM::CPU, new_image_size);
-                //cout << point_cloud.getWidth() << "," << point_cloud.getHeight() << endl;
+                // cout << point_cloud.getWidth() << "," << point_cloud.getHeight() << endl;
                 // Display image and depth using cv:Mat which share sl:Mat data
                 cv::namedWindow("Image_left",0);
                 cv::resizeWindow("Image_left",(int)1920/3,(int)1080/3);
                 cv::imshow("Image_left", image_ocv_undistort_left);
-                cv::namedWindow("Image_right",0);
-                cv::resizeWindow("Image_right",(int)1920/3,(int)1080/3);
-                cv::imshow("Image_right", image_ocv_undistort_right);
+//                cv::namedWindow("Image_right",0);
+//                cv::resizeWindow("Image_right",(int)1920/3,(int)1080/3);
+//                cv::imshow("Image_right", image_ocv_undistort_right);
                 cvWaitKey(1500);
-                // new census obj 需要手动释放对象的内存
-                census *CT_obj_left  = new census(0);
-                census *CT_obj_right = new census(1);
-                int winsize_x = 5;
-                int winsize_y = 5;
-                cv::Mat census_image_left, census_image_right; // census 变换结果 使用64F datatype
-                CT_obj_left ->census_transform(image_ocv_undistort_left,  census_image_left, winsize_x,winsize_y);
-                CT_obj_right->census_transform(image_ocv_undistort_right, census_image_right,winsize_x,winsize_y);
-
-                //cv::imshow("census_transfrom_L", census_image_left);
-                //cv::imshow("census_transfrom_R", census_image_right);
-                // 手动释放内存
-                CT_obj_left ->~census();
-                CT_obj_right->~census();
-
-                // 视差计算
-                dispart_estimate disp_obj(image_ocv_undistort_left,image_ocv_undistort_right);
+                // 视差计算  create obj to compute disp  set win_size
+                dispart_estimate disp_obj(9,7);  // census win_size w,h
                 cv::Mat disp_Image;
-                disp_obj.compute_disp(census_image_left, census_image_right,disp_Image);
+                disp_obj.compute_disp(image_ocv_undistort_left,image_ocv_undistort_right,disp_Image);
                 cv::namedWindow("Disp_image",0);
                 cv::resizeWindow("Disp_image",(int)1920/3,(int)1080/3);
                 cv::imshow("Disp_image",disp_Image);
                 cv::waitKey(0);
                 cv::destroyWindow("Disp_image");
-                cout<<"disp done enter the key order..."<<endl;
+                cv::imwrite("disp.bmp",disp_Image);
+                cout<<"disp done enter the key order... q: exit n: continue"<<endl;
                 // Handle key event
                 while(true){
                     key = cv::waitKey(10);

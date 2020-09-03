@@ -6,38 +6,33 @@ census::census(int id) {
 census::~census() {
 	//cout << "delete census_obj" << endl;
 }
-void census::census_transform(cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey) {
+void census::census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey) {
 		int image_height = input_image.rows;
 		int image_width = input_image.cols;
-		modified_image = cv::Mat::zeros(image_height, image_width, CV_64F);  // 64   census result
+		cv::Mat image_src;
+		cvtColor(input_image,image_src,CV_BGR2GRAY);
+		modified_image = cv::Mat::zeros(image_height, image_width, CV_32FC1);  // 64   census result
 		//-----------   census变换     -------------//
 		int offsetx = (window_sizex - 1) / 2;
 		int offsety = (window_sizey - 1) / 2;
-		for (int j = 0; j < image_width - window_sizex; j++)
-		{
-			for (int i = 0; i < image_height - window_sizey; i++)
-			{
-				unsigned long census = 0;
-				uchar current_pixel = input_image.at<uchar>(i + offsety, j + offsetx); //窗口中心像素
+		for (int j = 0; j < image_width - window_sizex; j++){       //col
+			for (int i = 0; i < image_height - window_sizey; i++){  //row
+				unsigned long census = 0;    // unsigned long
+				uint8_t current_pixel = image_src.at<uchar>(i + offsety, j + offsetx); //窗口中心像素  uchar
 				cv::Rect roi(j, i, window_sizex, window_sizey); //方形窗口
-				cv::Mat window(input_image, roi);
-
-				for (int a = 0; a < window_sizey; a++)
-				{
-					for (int b = 0; b < window_sizex; b++)
-					{
-						if (!(a == offsety && b == offsetx))//中心像素不做判断
-						{
-							census = census << 1;           //左移1位
-						}
-						uchar temp_value = window.at<uchar>(a, b);
-						if (temp_value <= current_pixel)    //当前像素小于中心像素 01
-						{
-							census += 1;
-						}
-					}
+				cv::Mat window(image_src, roi);
+				for (int a = 0; a < window_sizey; a++){
+					for (int b = 0; b < window_sizex; b++){
+						if (!(a == offsety && b == offsetx)){    //中心像素不做判断
+							census = census << 1;                //左移1位
+						    uint8_t temp_value = window.at<uchar>(a, b);
+						    if (temp_value < current_pixel){    //当前像素小于中心像素 01
+							    census += 1;
+						    }
+					    }
+				    }
 				}
-				modified_image.at<double>(i + offsety, j + offsetx) = census;
+				modified_image.at<float_t>(i + offsety, j + offsetx) = census;
 			}
 		}
 }
@@ -61,8 +56,7 @@ cost_sift::~cost_sift() {
 	//delete the class's variable member
 }
 void cost_sift::sift_transform(const cv::Mat img0,const cv::Mat img1,
-                               vector<vector<vector<float>>>& Desc0,vector<vector<vector<float>>>& Desc1)
-{
+                               vector<vector<vector<float>>>& Desc0,vector<vector<vector<float>>>& Desc1){
 	cv::cuda::GpuMat left_img;
 	cv::cuda::GpuMat right_img;
 	cv::Mat img0_gray, img1_gray;

@@ -14,34 +14,71 @@ __global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
     // cols<input> the number of  each row's whole point
     // D is the nums of every point's disp range
     // the first point as the L(p,d) init
-    // range from 28 to 1051
-    int tid=threadIdx.x;
-    res[tid+28][0]=Coss_disp[tid+28][0]; // initialize the first points's l(p,d)
+    int id_rows=blockIdx.x;
+    int id_d=threadIdx.x;
+    float min_last_path;
+    float min_agg;
+    float l_p0=0;   // stand l(p-r,d)
+    float l_p1=0;   // stand l(p-r,d-1)+p1
+    float l_p2=0;   // stand l(p-r,d+1)+p1
+    float l_p3=0;   // stand min_last_path+p2
+    res[id_rows][0][id_d]=Coss_disp[id_rows][0][id_d];  // init the l(p,r)
     __syncthreads();
-    for(int i=1;i<cols;i++) { //Aggregation  point index start 1:cols-1
-        // step 1 find the min cost in the L(p-1,i) # i stand the D range
-        float min_lpd=res[tid+28][i-1][0];
-        for(int m=1;m<D;m++){
-            if(res[tid+28][i-1][m]<min_lpd)
-                min_lpd=res[tid+28][i-1][m];
-        }
-        // step 2 compute different disp aggregation cost
-        for (int j = 1; j < D; j++) { // Disp j stand the current disp D(j)
-            // step 3 find the minimum among ( l(p-1,d), l(p-1,d-1)+p1, l(p-1.d+1)+p1, min_l(p-1,i)+p2 )
-            float l1=res[tid+28][i-1][j];      // l(p-1,d)
-            float l2=res[tid+28][i-1][j-1];    // l(p-1,d-1)
-            float l3=res[tid+28][i-1][j+1];    // l(p-1,d+1)
-            float min_poly_L=l1;
-            if(l2<min_poly_L)
-                min_poly_L=l2;
-            if(l3<min_poly_L)
-                min_poly_L=l3;
-            if(min_lpd<min_poly_L)
-                min_poly_L=min_lpd;
-            res[tid+28][i][j]=Coss_disp[tid+28][i][j]+min_poly_L-min_lpd;
-        }
+    float last_Lp[3];
+    if(id_d==0){
+        last_Lp[0]=res[id_rows][0][id_d];
+        last_Lp[1]=res[id_rows][0][id_d+1];
+        last_Lp[2]=res[id_rows][0][id_d+2];
+    }
+    if(id_d==D-1){
+        last_Lp[0]=res[id_rows][0][id_d];
+        last_Lp[1]=res[id_rows][0][id_d-1];
+        last_Lp[2]=res[id_rows][0][id_d-2];
+    }
+    if(id_d!=0&id_d!=D-1){
+        last_Lp[0]=res[id_rows][0][id_d-1];
+        last_Lp[1]=res[id_rows][0][id_d];
+        last_Lp[2]=res[id_rows][0][id_d+1];
     }
     __syncthreads();
+    for(int i=1;i<cols;i++){
+        // step 1 find min cost in last path
+        min_last_path=res[id_rows][i-1][0];
+        for(int j=1;j<D;j++){
+            if(res[id_rows][i-1][j]<min_last_path){
+                min_last_path=res[id_rows][i-1][j];
+            }
+        }
+        l_p0=last_Lp[1];
+        l_p1=last_Lp[0];
+        l_p2=last_Lp[2];
+        l_p3=min_last_path;
+        //step 2
+        min_agg=l_p0;
+        if(l_p1<min_agg)
+            min_agg=l_p1;
+        if(l_p2<min_agg)
+            min_agg=l_p2;
+        if(l_p3<min_agg)
+            min_agg=l_p3;
+        res[id_rows][i][id_d]=Coss_disp[id_rows][i][id_d]+min_agg-min_last_path;
+        if(id_d==0){
+            last_Lp[0]=res[id_rows][i][id_d];
+            last_Lp[1]=res[id_rows][i][id_d+1];
+            last_Lp[2]=res[id_rows][i][id_d+2];
+        }
+        if(id_d==D-1){
+            last_Lp[0]=res[id_rows][i][id_d];
+            last_Lp[1]=res[id_rows][i][id_d-1];
+            last_Lp[2]=res[id_rows][i][id_d-2];
+        }
+        if(id_d!=0&id_d!=D-1){
+            last_Lp[0]=res[id_rows][i][id_d-1];
+            last_Lp[1]=res[id_rows][i][id_d];
+            last_Lp[2]=res[id_rows][i][id_d+1];
+        }
+        __syncthreads();
+    }
 }
 __global__ void AggreKeral_right(float ***Coss_disp,float ***res,int cols,int D){
     // Coss_dosp<input> the disprity coss of the left and right image
@@ -141,7 +178,7 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
     int rows=cost_disp.size();  // cost_disp  first index
     int cols=cost_disp[0].size();  // second
     int D=cost_disp[0][0].size();     // third
-    cout<<"size: "<<rows<<","<<cols<<D<<endl;
+    //cout<<"size: "<<rows<<","<<cols<<","<<D<<endl;
 
     ////////////////////  data init //////////////////////////////
     float ***f_3   = (float***)malloc(rows * sizeof(float***));
@@ -170,51 +207,60 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
 //    }
     int index=0;
     for(int i=0;i<rows;i++){
-        for(int j=0;i<cols;j++){
+        for(int j=0;j<cols;j++){
             for(int k=0;k<D;k++){
                 f_1[index++]=cost_disp[i][j][k];
-                //cout<<f_1[index++]<<",";
             }
-            //cout<<endl;
         }
     }
-    cudaMemcpy(d_1, f_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_res_1, res_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
-    for (int i = 0; i < rows*cols ; i++)
-    {
+    cudaError_t error0=cudaMemcpy(d_1, f_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
+    //cout<<"0: "<<error0<<endl;
+    cudaError_t error1=cudaMemcpy(d_res_1, res_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
+    //cout<<"1: "<<error1<<endl;
+    for (int i = 0; i < rows*cols ; i++){
         f_2[i] = d_1 + i * D;
         res_2[i] = d_res_1 + i * D;
     }
-    cudaMemcpy(d_2, f_2, rows*cols * sizeof(float**), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_res_2, res_2, rows*cols * sizeof(float**), cudaMemcpyHostToDevice);
-    for (int i = 0; i < rows; i++)
-    {
+    cudaError_t error2=cudaMemcpy(d_2, f_2, rows*cols * sizeof(float**), cudaMemcpyHostToDevice);
+    //cout<<"2: "<<error2<<endl;
+    cudaError_t error3=cudaMemcpy(d_res_2, res_2, rows*cols * sizeof(float**), cudaMemcpyHostToDevice);
+    //cout<<"3: "<<error3<<endl;
+    for (int i = 0; i < rows; i++){
         f_3[i] = d_2 + cols * i;
         res_3[i] = d_res_2 + cols * i;
     }
-    cudaMemcpy(d_3, f_3, rows * sizeof(float***), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_res_3, res_3, rows * sizeof(float***), cudaMemcpyHostToDevice);
-    cudaDeviceSynchronize();
-
+    cudaError_t error4=cudaMemcpy(d_3, f_3, rows * sizeof(float***), cudaMemcpyHostToDevice);
+    //cout<<"4: "<<error4<<endl;
+    cudaError_t error5=cudaMemcpy(d_res_3, res_3, rows * sizeof(float***), cudaMemcpyHostToDevice);
+    //cout<<"5: "<<error5<<endl;
+    cudaError_t error6=cudaDeviceSynchronize();
+    //cout<<"6: "<<error6<<endl;
     //////////////////////////// end /////////////////////////
     /////////////////////////// four path aggregation ////////di
-    dim3 grid(1);
-    dim3 block(1024);
+    dim3 grid(rows);
+    dim3 block(D);
     AggreKeral_left<<<grid,block>>>(d_3,d_res_3,cols,D);     // aggregation from left to right
-    cudaDeviceSynchronize();                                 // synchronization
-    AggreKeral_right<<<grid,block>>>(d_res_3,d_3,cols,D);    // aggregation from right to left
-    cudaDeviceSynchronize();
-    dim3 top_grid(1);
-    int top_block_numOfthreads=cols/2;
-    dim3 top_block(top_block_numOfthreads,2);
-    Aggrekeral_top<<<top_grid,top_block>>>(d_3,d_res_3,rows,D);  // aggregation from top to down
-    cudaDeviceSynchronize();                                     // aggregation from down to top
-    Aggrekeral_down<<<top_grid,top_block>>>(d_res_3,d_3,rows,D);
-    cudaDeviceSynchronize();
+    cudaError_t cudaStatus=cudaGetLastError();
+    if(cudaStatus!=cudaSuccess){
+        fprintf(stderr,"aggregation failed:&s\n",cudaGetErrorString(cudaStatus));
+    }
+
+    cudaError_t error7=cudaDeviceSynchronize();              // synchronization
+    //cout<<"7: "<<error7<<endl;
+//    AggreKeral_right<<<grid,block>>>(d_res_3,d_3,cols,D);  // aggregation from right to left
+//    cudaError_t error8=cudaDeviceSynchronize();
+//    dim3 top_grid(1);
+//    int top_block_numOfthreads=cols/2;
+//    dim3 top_block(top_block_numOfthreads,2);
+//    Aggrekeral_top<<<top_grid,top_block>>>(d_3,d_res_3,rows,D);  // aggregation from top to down
+//    cudaError_t error9=cudaDeviceSynchronize();                                     // aggregation from down to top
+//    Aggrekeral_down<<<top_grid,top_block>>>(d_res_3,d_3,rows,D);
+//    cudaError_t error10=cudaDeviceSynchronize();
     ////////////////////////// end //////////////////////////
     /////////// download the data from device ///////////////
-    // copy the
-    cudaMemcpy(d_1,f_1,rows*cols * D * sizeof(float),cudaMemcpyDeviceToHost);
+    //
+    cudaError_t error11=cudaMemcpy(f_1,d_res_1,rows*cols * D * sizeof(float),cudaMemcpyDeviceToHost);
+    //cout<<"11: "<<error11<<endl;
     index=0;
     for(int i=0;i<rows;i++){
         for(int j=0;j<cols;j++){
@@ -228,15 +274,16 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
     free(f_3);
     free(f_2);
     free(f_1);
-    free(d_3);
-    free(d_2);
-    free(d_1);
+    cudaFree(d_3);
+    cudaFree(d_2);
+    cudaFree(d_1);
     free(res_3);
     free(res_2);
     free(res_1);
-    free(d_res_3);
-    free(d_res_2);
-    free(d_res_1);
+    cudaFree(d_res_3);
+    cudaFree(d_res_2);
+    cudaFree(d_res_1);
+    cout<<"cuda aggregation done..."<<endl;
     ////////////////////
     return 0;
 }
