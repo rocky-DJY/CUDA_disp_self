@@ -21,16 +21,16 @@ int DispMain() {
 		return 1; // Quit if an error occurred
 	}
 	// zed open 之后才能设置参数
-	zed.setCameraSettings(VIDEO_SETTINGS::GAIN, 50);
-	zed.setCameraSettings(VIDEO_SETTINGS::BRIGHTNESS, 4);
-	zed.setCameraSettings(VIDEO_SETTINGS::EXPOSURE, 50);
+	zed.setCameraSettings(VIDEO_SETTINGS::GAIN, 50);      // 50
+	zed.setCameraSettings(VIDEO_SETTINGS::BRIGHTNESS, 4); // 4
+	zed.setCameraSettings(VIDEO_SETTINGS::EXPOSURE, 20);  // 50
 	// Set runtime parameters after opening the camera
 	RuntimeParameters runtime_parameters;
 	runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
 	
 	// Prepare new image size to retrieve half-resolution images
 	Resolution image_size = zed.getCameraInformation().camera_configuration.resolution;
-	int new_width  = image_size.width / 1;
+	int new_width  = image_size.width  / 1;
 	int new_height = image_size.height / 1;
 	Resolution new_image_size(new_width, new_height);
 	// 左相机的zed校正图片  sl空间和opencv空间
@@ -43,7 +43,7 @@ int DispMain() {
 	char key = ' ';
 	int counter=0;
 	while (key!='q') {
-	    if(counter<30&zed.grab(runtime_parameters) == ERROR_CODE::SUCCESS){
+	    if(counter<5&zed.grab(runtime_parameters) == ERROR_CODE::SUCCESS){
             // Retrieve the left image, depth image in half-resolution
             zed.retrieveImage(image_zed_undistort_left, VIEW::LEFT, MEM::CPU, new_image_size);
             zed.retrieveImage(image_zed_undistort_right, VIEW::RIGHT, MEM::CPU, new_image_size);
@@ -64,11 +64,16 @@ int DispMain() {
 //                cv::imshow("Image_right", image_ocv_undistort_right);
                 cvWaitKey(1500);
                 // 视差计算  create obj to compute disp  set win_size
-                dispart_estimate disp_obj(9,7);  // census win_size w,h
+                dispart_estimate disp_obj(5,5);  // census win_size w,h
                 cv::Mat disp_Image;
-                disp_obj.compute_disp(image_ocv_undistort_left,image_ocv_undistort_right,disp_Image);
+
+            //    disp_obj.compute_disp(image_ocv_undistort_left,image_ocv_undistort_right,disp_Image);  //  0
+                cv::Mat image_left=cv::imread("/home/maxwell/DJY/image/Data/Cloth3/view1.png");               //  1
+                cv::Mat image_right=cv::imread("/home/maxwell/DJY/image/Data/Cloth3/view5.png");
+                disp_obj.compute_disp(image_left,image_right,disp_Image);
+
                 cv::namedWindow("Disp_image",0);
-                cv::resizeWindow("Disp_image",(int)1920/3,(int)1080/3);
+                cv::resizeWindow("Disp_image",(int)disp_Image.cols/1,(int)disp_Image.rows/1);
                 cv::imshow("Disp_image",disp_Image);
                 cv::waitKey(0);
                 cv::destroyWindow("Disp_image");

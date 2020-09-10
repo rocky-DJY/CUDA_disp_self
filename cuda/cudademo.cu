@@ -1,14 +1,16 @@
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-#include <sys/time.h>
-//#include <device_functions.h>
+#include <chrono>
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
 #include <vector>
+#include <opencv2/opencv.hpp>
 using namespace std;
+using namespace cv;
+using namespace chrono;
+#define P1_ini 10;
+#define P2_ini 150;
 #define CHECK(res) if(res!=cudaSuccess){exit(-1);}
-__global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
+__global__ void AggreKeral_left(float ***Coss_disp,float ***res,uint *image,int cols,int D)
 {
     // Coss_dosp<input> the disprity coss of the left and right image
     // cols<input> the number of  each row's whole point
@@ -17,6 +19,8 @@ __global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
     int id_rows=blockIdx.x;
     int id_d=threadIdx.x;
     float min_last_path;
+    float p1=P1_ini;
+    float p2=P2_ini;
     float min_agg;
     float l_p0=0;   // stand l(p-r,d)
     float l_p1=0;   // stand l(p-r,d-1)+p1
@@ -50,9 +54,9 @@ __global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
             }
         }
         l_p0=last_Lp[1];
-        l_p1=last_Lp[0];
-        l_p2=last_Lp[2];
-        l_p3=min_last_path;
+        l_p1=last_Lp[0]+p1;
+        l_p2=last_Lp[2]+p1;
+        l_p3=min_last_path+p2/(image[id_rows*cols+i]-image[id_rows*cols+i-1]);
         //step 2
         min_agg=l_p0;
         if(l_p1<min_agg)
@@ -80,106 +84,230 @@ __global__ void AggreKeral_left(float ***Coss_disp,float ***res,int cols,int D)
         __syncthreads();
     }
 }
-__global__ void AggreKeral_right(float ***Coss_disp,float ***res,int cols,int D){
+__global__ void AggreKeral_right(float *Coss_disp,float *res,uint *image,int rows,int cols,int D){
     // Coss_dosp<input> the disprity coss of the left and right image
     // cols<input> the number of  each row's whole point
     // D is the nums of every point's disp range
     // the first point as the L(p,d) init
-    // range from 28 to 1051
-    int tid=threadIdx.x;
-    res[tid+28][cols-1]=Coss_disp[tid+28][cols-1]; // initialize the first points's l(p,d) right boundaray
+    int id_rows=blockIdx.x;
+    int id_d=threadIdx.x;
+    float p1=P1_ini;
+    float p2=P2_ini;
+    float min_last_path;
+    float last_LP[3];
+    float min_agg;
+    float l_p0=0;   // stand l(p-r,d)
+    float l_p1=0;   // stand l(p-r,d-1)+p1
+    float l_p2=0;   // stand l(p-r,d+1)+p1
+    float l_p3=0;   // stand min_last_path+p2
+    res[id_rows*cols*D+cols*D+id_d]=Coss_disp[id_rows*cols*D+(cols-1)*D+id_d];  // init the l(p,r)
     __syncthreads();
-    for(int i=cols-2;i>-1;i--) { // point index start cols-2  to 0
-        // step 1 find the min cost in the L(p-1,i) # i stand the D range
-        float min_lpd=res[tid+28][i+1][0];
-        for(int m=1;m<D;m++){
-            if(res[tid+28][i+1][m]<min_lpd)
-                min_lpd=res[tid+28][i+1][m];
+    if(id_d==0){
+        last_LP[0]=res[id_rows*cols*D+(cols-1)*D+ id_d];   //res[id_rows][cols-1][id_d];
+        last_LP[1]=res[id_rows*cols*D+(cols-1)*D+ id_d+1]; //res[id_rows][cols-1][id_d+1];
+        last_LP[2]=res[id_rows*cols*D+(cols-1)*D+ id_d+2]; //res[id_rows][cols-1][id_d+2];
+    }
+    if(id_d==D-1){
+        last_LP[0]=res[id_rows*cols*D+(cols-1)*D+ id_d];
+        last_LP[1]=res[id_rows*cols*D+(cols-1)*D+ id_d-1];
+        last_LP[2]=res[id_rows*cols*D+(cols-1)*D+ id_d-2];
+    }
+    if(id_d!=0&id_d!=D-1){
+        last_LP[0]=res[id_rows*cols*D+(cols-1)*D+ id_d-1];
+        last_LP[1]=res[id_rows*cols*D+(cols-1)*D+ id_d];
+        last_LP[2]=res[id_rows*cols*D+(cols-1)*D+ id_d+1];
+    }
+    for(int i=cols-2;i>-1;i--){
+        // step 1 find min cost in last path
+        // min_last_path=res[id_rows][i-1][0];
+        min_last_path=res[id_rows*cols*D+(i+1)*D];
+        for(int j=1;j<D;j++){
+            if(res[id_rows*cols*D+(i+1)*D+j]<min_last_path){
+                //min_last_path=res[id_rows][i-1][j];
+                min_last_path=res[id_rows*cols*D+(i+1)*D+j];
+            }
         }
-        // step 2 compute different disp aggregation cost
-        for (int j = 1; j < D; j++) { // Disp j stand the current disp D(j)
-            // step 3 find the minimum among ( l(p-1,d), l(p-1,d-1)+p1, l(p-1.d+1)+p1, min_l(p-1,i)+p2 )
-            float l1=res[tid+28][i+1][j];      // l(p-1,d)
-            float l2=res[tid+28][i+1][j-1];    // l(p-1,d-1)
-            float l3=res[tid+28][i+1][j+1];    // l(p-1,d+1)
-            float min_poly_L=l1;
-            if(l2<min_poly_L)
-                min_poly_L=l2;
-            if(l3<min_poly_L)
-                min_poly_L=l3;
-            if(min_lpd<min_poly_L)
-                min_poly_L=min_lpd;
-            res[tid+28][i][j]=Coss_disp[tid+28][i][j]+min_poly_L-min_lpd;
+        l_p0=last_LP[1];
+        l_p1=last_LP[0]+p1;
+        l_p2=last_LP[2]+p1;
+        l_p3=min_last_path+p2/(image[id_rows*cols+i]-image[id_rows*cols+i+1]);
+        // step 2
+        min_agg=l_p0;
+        if(l_p1<min_agg)
+            min_agg=l_p1;
+        if(l_p2<min_agg)
+            min_agg=l_p2;
+        if(l_p3<min_agg)
+            min_agg=l_p3;
+        //res[id_rows][i][id_d]=Coss_disp[id_rows][i][id_d]+min_agg-min_last_path;
+        res[id_rows*cols*D+i*D+id_d]=Coss_disp[id_rows*cols*D+i*D+id_d]+min_agg-min_last_path;
+        __syncthreads();
+        if(id_d==0){
+            last_LP[0]=res[id_rows*cols*D+i*D+ id_d];   //res[id_rows][0][id_d];
+            last_LP[1]=res[id_rows*cols*D+i*D+ id_d+1]; //res[id_rows][0][id_d+1];
+            last_LP[2]=res[id_rows*cols*D+i*D+ id_d+2]; //res[id_rows][0][id_d+2];
         }
+        if(id_d==D-1){
+            last_LP[0]=res[id_rows*cols*D+i*D+ id_d];
+            last_LP[1]=res[id_rows*cols*D+i*D+ id_d-1];
+            last_LP[2]=res[id_rows*cols*D+i*D+ id_d-2];
+        }
+        if(id_d!=0&id_d!=D-1){
+            last_LP[0]=res[id_rows*cols*D+i*D+ id_d-1];
+            last_LP[1]=res[id_rows*cols*D+i*D+ id_d];
+            last_LP[2]=res[id_rows*cols*D+i*D+ id_d+1];
+        }
+        __syncthreads();
+    }
+}
+__global__ void Aggrekeral_top(float *Coss_disp,float *res,uint *image,int rows,int cols,int D){  // top to down
+    int id_cols=blockIdx.x;
+    int id_d=threadIdx.x;
+    float p1=P1_ini;
+    float p2=P2_ini;
+    float min_last_path;
+    float last_LP[3];
+    float min_agg;
+    float l_p0=0;   // stand l(p-r,d)
+    float l_p1=0;   // stand l(p-r,d-1)+p1
+    float l_p2=0;   // stand l(p-r,d+1)+p1
+    float l_p3=0;   // stand min_last_path+p2
+    res[id_cols*D+id_d]=Coss_disp[id_cols*D+id_d];  // init the l(p,r)
+    __syncthreads();
+    if(id_d==0){
+        last_LP[0]=res[id_cols*D+ id_d];
+        last_LP[1]=res[id_cols*D+ id_d+1];
+        last_LP[2]=res[id_cols*D+ id_d+2];
+    }
+    if(id_d==D-1){
+        last_LP[0]=res[id_cols*D+ id_d];
+        last_LP[1]=res[id_cols*D+ id_d-1];
+        last_LP[2]=res[id_cols*D+ id_d-2];
+    }
+    if(id_d!=0&id_d!=D-1){
+        last_LP[0]=res[id_cols*D+ id_d-1];
+        last_LP[1]=res[id_cols*D+ id_d];
+        last_LP[2]=res[id_cols*D+ id_d+1];
     }
     __syncthreads();
-}
-__global__ void Aggrekeral_top(float ***Coss_disp,float ***res,int rows,int D){  // top to down
-     int tid_x=blockIdx.x*blockDim.x+threadIdx.x;    // blockidx point the block coordinate
-     res[0][tid_x]=Coss_disp[0][tid_x];              // initinal
-     __syncthreads();
-     for(int i=1;i<rows;i++) { // point index start  1 to rows-1
-        // step 1 find the min cost in the L(p-1,i) # i from the D range
-        float min_lpd=res[i-1][tid_x][0];
-        for(int m=1;m<D;m++){
-            if(res[i-1][tid_x][m]<min_lpd)
-                min_lpd=res[i-1][tid_x][m];
+    for(int i=1;i<rows;i++){
+        // step 1 find min cost in last path
+        min_last_path=res[(i-1)*cols*D+id_cols*D];
+        for(int j=1;j<D;j++){
+            if(res[(i-1)*cols*D+id_cols*D+j]<min_last_path){
+                //min_last_path=res[i-1][j][k];
+                min_last_path=res[(i-1)*cols*D+id_cols*D+j];
+            }
         }
-        // step 2 compute different disp aggregation cost
-        for (int j = 1; j < D; j++) { // Disp j stand the current disp D(j)
-            // step 3 find the minimum among ( l(p-1,d), l(p-1,d-1)+p1, l(p-1.d+1)+p1, min_l(p-1,i)+p2 )
-            float l1=res[i-1][tid_x][j];      // l(p-1,d)
-            float l2=res[i-1][tid_x][j-1];    // l(p-1,d-1)
-            float l3=res[i-1][tid_x][j+1];    // l(p-1,d+1)
-            float min_poly_L=l1;
-            if(l2<min_poly_L)
-                min_poly_L=l2;
-            if(l3<min_poly_L)
-                min_poly_L=l3;
-            if(min_lpd<min_poly_L)
-                min_poly_L=min_lpd;
-            res[i][tid_x][j]=Coss_disp[i][tid_x][j]+min_poly_L-min_lpd;
+        l_p0=last_LP[1];
+        l_p1=last_LP[0]+p1;
+        l_p2=last_LP[2]+p1;
+        l_p3=min_last_path+p2/(image[i*cols+id_cols]-image[(i-1)*cols+id_cols]);
+        // step 2
+        min_agg=l_p0;
+        if(l_p1<min_agg)
+            min_agg=l_p1;
+        if(l_p2<min_agg)
+            min_agg=l_p2;
+        if(l_p3<min_agg)
+            min_agg=l_p3;
+        res[i*cols*D+id_cols*D+id_d]=Coss_disp[i*cols*D+id_cols*D+id_d]+min_agg-min_last_path;
+        __syncthreads();
+        if(id_d==0){
+            last_LP[0]=res[i*cols*D+id_cols*D+ id_d];   //res[i][id_cols][id_d];
+            last_LP[1]=res[i*cols*D+id_cols*D+ id_d+1]; //res[i][id_cols][id_d+1];
+            last_LP[2]=res[i*cols*D+id_cols*D+ id_d+2]; //res[i][id_cols][id_d+2];
         }
-     }
-    __syncthreads();
-}
-__global__ void Aggrekeral_down(float ***Coss_disp,float ***res,int rows,int D){  // top to down
-    int tid_x=blockIdx.x*blockDim.x+threadIdx.x;    // blockidx point the block coordinate
-    res[rows-1][tid_x]=Coss_disp[rows-1][tid_x];              // initinal
-    __syncthreads();
-    for(int i=rows-2;i>-1;i--) { // point index start  1 to rows-1
-        // step 1 find the min cost in the L(p-1,i) # i from the D range
-        float min_lpd=res[i-1][tid_x][0];
-        for(int m=1;m<D;m++){
-            if(res[i+1][tid_x][m]<min_lpd)
-                min_lpd=res[i+1][tid_x][m];
+        if(id_d==D-1){
+            last_LP[0]=res[i*cols*D+id_cols*D+ id_d];
+            last_LP[1]=res[i*cols*D+id_cols*D+ id_d-1];
+            last_LP[2]=res[i*cols*D+id_cols*D+ id_d-2];
         }
-        // step 2 compute different disp aggregation cost
-        for (int j = 1; j < D; j++) { // Disp j stand the current disp D(j)
-            // step 3 find the minimum among ( l(p-1,d), l(p-1,d-1)+p1, l(p-1.d+1)+p1, min_l(p-1,i)+p2 )
-            float l1=res[i+1][tid_x][j];      // l(p-1,d)
-            float l2=res[i+1][tid_x][j-1];    // l(p-1,d-1)
-            float l3=res[i+1][tid_x][j+1];    // l(p-1,d+1)
-            float min_poly_L=l1;
-            if(l2<min_poly_L)
-                min_poly_L=l2;
-            if(l3<min_poly_L)
-                min_poly_L=l3;
-            if(min_lpd<min_poly_L)
-                min_poly_L=min_lpd;
-            res[i][tid_x][j]=Coss_disp[i][tid_x][j]+min_poly_L-min_lpd;
+        if(id_d!=0&id_d!=D-1){
+            last_LP[0]=res[i*cols*D+id_cols*D+ id_d-1];
+            last_LP[1]=res[i*cols*D+id_cols*D+ id_d];
+            last_LP[2]=res[i*cols*D+id_cols*D+ id_d+1];
         }
+        __syncthreads();
     }
-    __syncthreads();
 }
-extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
-{
+__global__ void Aggrekeral_down(float *Coss_disp,float *res,uint *image,int rows,int cols,int D){  // down to top
+    int id_cols=blockIdx.x;
+    int id_d=threadIdx.x;
+    float p1=P1_ini;
+    float p2=P2_ini;
+    float min_last_path;
+    float last_LP[3];
+    float min_agg;
+    float l_p0=0;   // stand l(p-r,d)
+    float l_p1=0;   // stand l(p-r,d-1)+p1
+    float l_p2=0;   // stand l(p-r,d+1)+p1
+    float l_p3=0;   // stand min_last_path+p2
+    res[(rows-1)*cols*D+id_cols*D+id_d]=Coss_disp[(rows-1)*cols*D+id_cols*D+id_d]; // init the l(p,r)
+    __syncthreads();
+    if(id_d==0){
+        last_LP[0]=res[(rows-1)*cols*D+id_cols*D+ id_d];
+        last_LP[1]=res[(rows-1)*cols*D+id_cols*D+ id_d+1];
+        last_LP[2]=res[(rows-1)*cols*D+id_cols*D+ id_d+2];
+    }
+    if(id_d==D-1){
+        last_LP[0]=res[(rows-1)*cols*D+id_cols*D+ id_d];
+        last_LP[1]=res[(rows-1)*cols*D+id_cols*D+ id_d-1];
+        last_LP[2]=res[(rows-1)*cols*D+id_cols*D+ id_d-2];
+    }
+    if(id_d!=0&id_d!=D-1){
+        last_LP[0]=res[(rows-1)*cols*D+id_cols*D+ id_d-1];
+        last_LP[1]=res[(rows-1)*cols*D+id_cols*D+ id_d];
+        last_LP[2]=res[(rows-1)*cols*D+id_cols*D+ id_d+1];
+    }
+    for(int i=rows-2;i>-1;i--){
+        // step 1 find min cost in last path
+        min_last_path=res[(i+1)*cols*D+id_cols*D];
+        for(int j=1;j<D;j++){
+            if(res[(i+1)*cols*D+id_cols*D+j]<min_last_path){
+                //min_last_path=res[i-1][j][k];
+                min_last_path=res[(i+1)*cols*D+id_cols*D+j];
+            }
+        }
+        l_p0=last_LP[1];
+        l_p1=last_LP[0]+p1;
+        l_p2=last_LP[2]+p1;
+        l_p3=min_last_path+p2/(image[i*cols+id_cols]-image[(i-1)*cols+id_cols]);
+        // step 2
+        min_agg=l_p0;
+        if(l_p1<min_agg)
+            min_agg=l_p1;
+        if(l_p2<min_agg)
+            min_agg=l_p2;
+        if(l_p3<min_agg)
+            min_agg=l_p3;
+        res[i*cols*D+id_cols*D+id_d]=Coss_disp[i*cols*D+id_cols*D+id_d]+min_agg-min_last_path;
+        __syncthreads();
+        if(id_d==0){
+            last_LP[0]=res[i*cols*D+id_cols*D+ id_d];
+            last_LP[1]=res[i*cols*D+id_cols*D+ id_d+1];
+            last_LP[2]=res[i*cols*D+id_cols*D+ id_d+2];
+        }
+        if(id_d==D-1){
+            last_LP[0]=res[i*cols*D+id_cols*D+ id_d];
+            last_LP[1]=res[i*cols*D+id_cols*D+ id_d-1];
+            last_LP[2]=res[i*cols*D+id_cols*D+ id_d-2];
+        }
+        if(id_d!=0&id_d!=D-1){
+            last_LP[0]=res[i*cols*D+id_cols*D+ id_d-1];
+            last_LP[1]=res[i*cols*D+id_cols*D+ id_d];
+            last_LP[2]=res[i*cols*D+id_cols*D+ id_d+1];
+        }
+        __syncthreads();
+    }
+}
+extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp,
+        const cv::Mat left_image){ // gray image left and right
     cout<<"enter cuda keral..."<<endl;
-    int rows=cost_disp.size();  // cost_disp  first index
+    int rows=cost_disp.size();     // cost_disp  first index
     int cols=cost_disp[0].size();  // second
-    int D=cost_disp[0][0].size();     // third
+    int D=cost_disp[0][0].size();  // third
     //cout<<"size: "<<rows<<","<<cols<<","<<D<<endl;
-
     ////////////////////  data init //////////////////////////////
     float ***f_3   = (float***)malloc(rows * sizeof(float***));
     float ***res_3 = (float***)malloc(rows * sizeof(float***));
@@ -187,32 +315,40 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
     float **res_2  = (float**)malloc(rows * cols * sizeof(float**));
     float *f_1     = (float*)malloc(rows*cols * D * sizeof(float*));
     float *res_1   = (float*)malloc(rows*cols * D * sizeof(float*));
+    uint *image   = (uint*)malloc(rows*cols * sizeof(uint*));
 
     float ***d_res_3;  // result disp after aggregation
     float ***d_3;      // initional disp
     cudaMalloc((void**)(&d_3), rows * sizeof(float***));
     cudaMalloc((void**)(&d_res_3), rows * sizeof(float***));
+
     float **d_2;
     float **d_res_2;
     cudaMalloc((void**)(&d_2), rows*cols * sizeof(float**));
     cudaMalloc((void**)(&d_res_2), rows*cols * sizeof(float**));
+
     float *d_1;
     float *d_res_1;
+    uint *device_image;
     cudaMalloc((void**)(&d_1), rows*cols * D * sizeof(float));
     cudaMalloc((void**)(&d_res_1), rows*cols * D * sizeof(float));
+    cudaMalloc((void**)(&device_image), rows*cols * sizeof(uint));
 
 //    for (int i = 0; i < rows*cols * D; i++)// ini the data 3D
 //    {
 //        f_1[i] = 0;
 //    }
     int index=0;
+    int index_image=0;
     for(int i=0;i<rows;i++){
         for(int j=0;j<cols;j++){
+            image[index_image++]=left_image.at<uchar>(i,j);
             for(int k=0;k<D;k++){
                 f_1[index++]=cost_disp[i][j][k];
             }
         }
     }
+    cudaMemcpy(device_image,image,rows*cols*sizeof(uint),cudaMemcpyHostToDevice);
     cudaError_t error0=cudaMemcpy(d_1, f_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
     //cout<<"0: "<<error0<<endl;
     cudaError_t error1=cudaMemcpy(d_res_1, res_1, rows*cols * D * sizeof(float), cudaMemcpyHostToDevice);
@@ -236,30 +372,33 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
     cudaError_t error6=cudaDeviceSynchronize();
     //cout<<"6: "<<error6<<endl;
     //////////////////////////// end /////////////////////////
-    /////////////////////////// four path aggregation ////////di
+    /////////////////////////// four path aggregation ////////
     dim3 grid(rows);
     dim3 block(D);
-    AggreKeral_left<<<grid,block>>>(d_3,d_res_3,cols,D);     // aggregation from left to right
+
+    // aggregation from left to right
+    auto start=system_clock::now();
+    AggreKeral_left<<<grid,block>>>(d_3,d_res_3,device_image,cols,D);
+    cudaDeviceSynchronize();
+    //aggregation from right to left
+    AggreKeral_right<<<grid,block>>>(d_res_1,d_1,device_image,rows,cols,D);
+    cudaDeviceSynchronize();
+    // aggregation from top to down
+    dim3 grid_td(cols);
+    dim3 block_td(D);
+    Aggrekeral_top<<<grid_td,block_td>>>(d_1,d_res_1,device_image,rows,cols,D);
+    cudaDeviceSynchronize();
+    Aggrekeral_down<<<grid_td,block_td>>>(d_res_1,d_1,device_image,rows,cols,D);
+    cudaDeviceSynchronize();
     cudaError_t cudaStatus=cudaGetLastError();
     if(cudaStatus!=cudaSuccess){
         fprintf(stderr,"aggregation failed:&s\n",cudaGetErrorString(cudaStatus));
     }
-
-    cudaError_t error7=cudaDeviceSynchronize();              // synchronization
-    //cout<<"7: "<<error7<<endl;
-//    AggreKeral_right<<<grid,block>>>(d_res_3,d_3,cols,D);  // aggregation from right to left
-//    cudaError_t error8=cudaDeviceSynchronize();
-//    dim3 top_grid(1);
-//    int top_block_numOfthreads=cols/2;
-//    dim3 top_block(top_block_numOfthreads,2);
-//    Aggrekeral_top<<<top_grid,top_block>>>(d_3,d_res_3,rows,D);  // aggregation from top to down
-//    cudaError_t error9=cudaDeviceSynchronize();                                     // aggregation from down to top
-//    Aggrekeral_down<<<top_grid,top_block>>>(d_res_3,d_3,rows,D);
-//    cudaError_t error10=cudaDeviceSynchronize();
+    cudaError_t error7=cudaDeviceSynchronize(); // synchronization
     ////////////////////////// end //////////////////////////
     /////////// download the data from device ///////////////
-    //
-    cudaError_t error11=cudaMemcpy(f_1,d_res_1,rows*cols * D * sizeof(float),cudaMemcpyDeviceToHost);
+    //cudaError_t error11=cudaMemcpy(f_1,d_res_1,rows*cols * D * sizeof(float),cudaMemcpyDeviceToHost);
+    cudaError_t error11=cudaMemcpy(f_1,d_1,rows*cols * D * sizeof(float),cudaMemcpyDeviceToHost);
     //cout<<"11: "<<error11<<endl;
     index=0;
     for(int i=0;i<rows;i++){
@@ -269,6 +408,10 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
             }
         }
     }
+    auto last=system_clock::now();
+    auto duration=duration_cast<microseconds>(last-start);
+    cout<<"aggregation cost total time:  "
+        <<double(duration.count())*microseconds::period::num/microseconds::period::den<<endl;
     /////////// end  ////////////
     /////////// free  ///////////
     free(f_3);
@@ -280,9 +423,11 @@ extern "C" int cuda_main( vector<vector<vector<float> > > &cost_disp)
     free(res_3);
     free(res_2);
     free(res_1);
+    free(image);
     cudaFree(d_res_3);
     cudaFree(d_res_2);
     cudaFree(d_res_1);
+    cudaFree(device_image);
     cout<<"cuda aggregation done..."<<endl;
     ////////////////////
     return 0;

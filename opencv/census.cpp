@@ -1,5 +1,5 @@
 #include "census.h"
-//kkk
+#include <tiff.h>
 census::census(int id) {
 	//cout << "creat_census_id: "<<id << endl;
 }
@@ -17,15 +17,15 @@ void census::census_transform(const cv::Mat input_image, cv::Mat &modified_image
 		int offsety = (window_sizey - 1) / 2;
 		for (int j = 0; j < image_width - window_sizex; j++){       //col
 			for (int i = 0; i < image_height - window_sizey; i++){  //row
-				unsigned long census = 0;    // unsigned long
-				uint8_t current_pixel = image_src.at<uchar>(i + offsety, j + offsetx); //窗口中心像素  uchar
+				uint32 census = 0u;    // unsigned long
+				uint8_t current_pixel = image_src.at<uint8_t>(i + offsety, j + offsetx); //窗口中心像素  uchar
 				cv::Rect roi(j, i, window_sizex, window_sizey); //方形窗口
 				cv::Mat window(image_src, roi);
 				for (int a = 0; a < window_sizey; a++){
 					for (int b = 0; b < window_sizex; b++){
 						if (!(a == offsety && b == offsetx)){    //中心像素不做判断
 							census = census << 1;                //左移1位
-						    uint8_t temp_value = window.at<uchar>(a, b);
+						    uint8_t temp_value = window.at<uint8_t>(a, b);
 						    if (temp_value < current_pixel){    //当前像素小于中心像素 01
 							    census += 1;
 						    }
