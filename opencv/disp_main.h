@@ -6,13 +6,14 @@
 #define CUDA_TEST_DISP_MAIN_H
 #endif //CUDA_TEST_DISP_MAIN_H
 
-#include "census.h"
+#include "feature_descript.h"
 #include "dispart_estimate.h"
 #include <iostream>
 // ZED includes
 #include <sl/Camera.hpp>
 // OpenCV includes
 #include <opencv2/opencv.hpp>
+#include <opencv2/highgui.hpp>
 #include "devicequery.h"
 using namespace sl;
 using namespace std;

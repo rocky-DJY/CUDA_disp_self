@@ -23,31 +23,29 @@ void bublle_sort(std::vector<int> &arr){
     }
 }
 //中值滤波
-void MedianFilter(cv::Mat& src, cv::Mat& dst, cv::Size wsize){
-    //图像边界扩充
-    if (wsize.width % 2 == 0 || wsize.height % 2 == 0){
-        fprintf(stderr, "Please enter odd size!");
-        exit(-1);
-    }
-    int hh = (wsize.height - 1) / 2;
-    int hw = (wsize.width - 1) / 2;
-    cv::Mat Newsrc;
-    cv::copyMakeBorder(src, Newsrc, hh, hh, hw, hw, cv::BORDER_REFLECT_101);//以边缘为轴，对称
-    dst = cv::Mat::zeros(src.rows, src.cols, src.type());
-
-    //中值滤波
-    for (int i = hh; i < src.rows + hh; ++i){
-        uchar* ptrdst = dst.ptr(i - hh);
-        for (int j = hw; j < src.cols + hw; ++j){
-            std::vector<int> pix;
-            for (int r = i - hh; r <= i + hh; ++r){
-                const uchar* ptrsrc = Newsrc.ptr(r);
-                for (int c = j - hw; c <= j + hw; ++c){
-                    pix.push_back(ptrsrc[c]);
+void MedianFilter(const float* in, float* out, const int32_t& width, const int32_t& height,const int32_t wnd_size){
+    const int32_t radius = wnd_size / 2;
+    const int32_t size = wnd_size * wnd_size;
+    // 存储局部窗口内的数据
+    std::vector<float> wnd_data;
+    wnd_data.reserve(size);
+    for (int32_t i = 0; i < height; i++) {
+        for (int32_t j = 0; j < width; j++) {
+            wnd_data.clear();
+            // 获取局部窗口数据
+            for (int32_t r = -radius; r <= radius; r++) {
+                for (int32_t c = -radius; c <= radius; c++) {
+                    const int32_t row = i + r;
+                    const int32_t col = j + c;
+                    if (row >= 0 && row < height && col >= 0 && col < width) {
+                        wnd_data.push_back(in[row * width + col]);
+                    }
                 }
             }
-            bublle_sort(pix);//冒泡排序
-            ptrdst[j - hw] = pix[(wsize.area() - 1) / 2];//将中值映射到输出图像
+            // 排序
+            std::sort(wnd_data.begin(), wnd_data.end());
+            // 取中值
+            out[i * width + j] = wnd_data[wnd_data.size() / 2];
         }
     }
 }

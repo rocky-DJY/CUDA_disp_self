@@ -8,4 +8,5 @@
 #ifndef CUDA_TEST_IMAGE_PROCESS_UTL_H
 #define CUDA_TEST_IMAGE_PROCESS_UTL_H
 #endif //CUDA_TEST_IMAGE_PROCESS_UTL_H
-void MedianFilter(cv::Mat& src, cv::Mat& dst, cv::Size wsize);
+void MedianFilter(const float* in, float* out,
+        const int32_t& width, const int32_t& height,const int32_t wnd_size);

@@ -27,7 +27,7 @@ link_directories(${LINK_DIR})
 INCLUDE(/usr/local/share/cmake-3.18/Modules/FindCUDA.cmake)
 CUDA_ADD_EXECUTABLE(cuda_test
         cuda/main.cpp cuda/cudademo.cu
-        opencv/census.cpp opencv/census.h opencv/devicequery.cpp opencv/devicequery.h
+        opencv/feature_descript.cpp opencv/feature_descript.h opencv/devicequery.cpp opencv/devicequery.h
         opencv/disp_main.cpp opencv/disp_main.h
         opencv/dispart_estimate.cpp opencv/dispart_estimate.h
         opencv/image_process_utl.cpp opencv/image_process_utl.h)
