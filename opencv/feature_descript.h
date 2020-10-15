@@ -14,8 +14,11 @@ public:
 	census(int id);
 	// census 变换
 	void census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey);
+	// census 重载  升级版
+    void census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey,float threshold_val);
 	// 汉明距离计算
 	unsigned char census_hanming_dist(long long PL, long long PR);
+	// unsigned long census_hanming_dist(long long PL, long long PR);
 	~census();
 private:
     int id;
@@ -29,4 +32,13 @@ public:
 	~cost_sift();
 private:
 
+};
+class WLD{
+public:
+    WLD(int id);
+    void WLD_trans(const cv::Mat input_image, cv::Mat &modified_image,
+                    int window_sizex, int window_sizey);
+    ~WLD();
+
+private:
 };

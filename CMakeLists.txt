@@ -5,16 +5,17 @@ project(cuda_test)
 set(CMAKE_CUDA_STANDARD 14)
 ########## opencv c++ partion##############
 set(CMAKE_CXX_STANDARD  11)
-set(CMAKE_PREFIX_PATH   /home/maxwell/DJY/opencv3411/debug)
+set(OpenCV_DIR   /home/maxwell/DJY/opencv3411/debug/share/OpenCV)
 find_package(OpenCV REQUIRED)
 # find zed and cuda head file (zed need cuda head)
 set(INC_DIR
         "/usr/local/zed/include"
-        "/usr/local/cuda-10.2/include"
+        #"/usr/local/cuda-10.2/include"
         )
 set(LINK_DIR
         "/usr/local/zed/lib"
-        "/usr/local/cuda-10.2/lib64")
+        #"/usr/local/cuda-10.2/lib64"
+        )
 set(zed_lib_list
         libsl_ai.so
         libsl_zed.so
@@ -29,11 +30,8 @@ CUDA_ADD_EXECUTABLE(cuda_test
         cuda/main.cpp cuda/cudademo.cu
         opencv/feature_descript.cpp opencv/feature_descript.h opencv/devicequery.cpp opencv/devicequery.h
         opencv/disp_main.cpp opencv/disp_main.h
-        opencv/dispart_estimate.cpp opencv/dispart_estimate.h
-        opencv/image_process_utl.cpp opencv/image_process_utl.h)
+        opencv/correTest.cpp opencv/dispart_estimate.h
+        opencv/image_process_utl.cpp opencv/image_process_utl.h
+        opencv/corre.cpp opencv/corre.h)
 # link lib
 target_link_libraries(cuda_test ${OpenCV_LIBS} ${zed_lib_list})
-#set_target_properties(
-#        cuda_test
-#        PROPERTIES
-#        CUDA_SEPARABLE_COMPILATION ON)

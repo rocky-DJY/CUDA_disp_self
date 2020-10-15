@@ -68,24 +68,27 @@ int DispMain() {
                 cv::namedWindow("Image_left",0);
                 cv::resizeWindow("Image_left",(int)1920/3,(int)1080/3);
                 cv::imshow("Image_left", LEFT_image);
+                cv::imwrite("LeftImage.bmp",LEFT_image);   // write
+
                 cv::namedWindow("Image_right",0);
                 cv::resizeWindow("Image_right",(int)1920/3,(int)1080/3);
                 cv::imshow("Image_right",RIGHT_image);
+                cv::imwrite("RightImage.bmp",RIGHT_image);   // write
                 cvWaitKey(1500);
                 //  ”≤Óº∆À„  create obj to compute disp  set win_size
-                dispart_estimate disp_obj(7,5);  // census win_size w,h
+                dispart_estimate disp_obj(5,5);  // census win_size w,h
                 cv::Mat disp_Image;
 
                 disp_obj.compute_disp(LEFT_image,RIGHT_image,disp_Image);  //  0
 //                cv::Mat image_left=cv::imread("/home/maxwell/Downloads/Bicycle1-perfect/im0.png");               //  1
 //                cv::Mat image_right=cv::imread("/home/maxwell/Downloads/Bicycle1-perfect/im1.png");
-//                int scale=1;
+//                int scale=2;
 //                cv::resize(image_left,image_left,cv::Size((int)image_left.cols/scale,(int)image_left.rows/scale));
 //                cv::resize(image_right,image_right,cv::Size((int)image_right.cols/scale,(int)image_right.rows/scale));
 //                disp_obj.compute_disp(image_left,image_right,disp_Image);
 
                 cv::namedWindow("Disp_image",0);
-                cv::resizeWindow("Disp_image",(int)disp_Image.cols/2,(int)disp_Image.rows/2);
+                cv::resizeWindow("Disp_image",(int)disp_Image.cols/3,(int)disp_Image.rows/3);
                 cv::imshow("Disp_image",disp_Image);
                 cv::waitKey(0);
                 cv::destroyWindow("Disp_image");

@@ -1,5 +1,5 @@
 #include "dispart_estimate.h"
-#define MAX_DISPARITY 164
+#define MAX_DISPARITY 168
 #define MIN_DISPARITY 1
 constexpr auto Invalid_Float=std::numeric_limits<float>::infinity();
 extern "C" int cuda_main(float *Cost_disp,float *Cost_Agg,const int Rows,const int Cols, const int D_,
@@ -48,6 +48,7 @@ void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::
     cout<<"src image size: "<<disp_map.size()<<endl;
     census *CT_obj_left  = new census(0);
     census *CT_obj_right = new census(1);
+   //  WLD wld_trans(0);
     //////////////// split RGB to three invidival threee image mat ///////////////
     ////////////////      census transform for each channel        ///////////////
     cv::Mat left_RGB[3],right_RGB[3];
@@ -66,9 +67,15 @@ void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::
     CT_obj_right->census_transform(this->RightB, CensusRightB,winsize_x,winsize_y);
     CT_obj_right->census_transform(this->RightG, CensusRightG,winsize_x,winsize_y);
     CT_obj_right->census_transform(this->RightR, CensusRightR,winsize_x,winsize_y);
+//    wld_trans.WLD_trans(this->LeftB,  CensusLeftB, winsize_x,winsize_y);
+//    wld_trans.WLD_trans(this->LeftG,  CensusLeftG, winsize_x,winsize_y);
+//    wld_trans.WLD_trans(this->LeftR,  CensusLeftR, winsize_x,winsize_y);
+//    wld_trans.WLD_trans(this->RightB, CensusRightB,winsize_x,winsize_y);
+//    wld_trans.WLD_trans(this->RightG, CensusRightG,winsize_x,winsize_y);
+//    wld_trans.WLD_trans(this->RightR, CensusRightR,winsize_x,winsize_y);
     // 手动释放内存
-    CT_obj_left ->~census();
-    CT_obj_right->~census();
+    // CT_obj_left ->~census();
+    // CT_obj_right->~census();
     /////////////////////// end ///////////////////////////////
 	// 此函数计算视差图
 	// 输入  census_left，census_right是经过census变换的图片
@@ -85,9 +92,9 @@ void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::
     cout<<"sift done"<<endl;
     cv::Mat image_left_gray;
     cv::Mat image_left_roi;
-    float weight0=1;
-    float weight1=1;
-    float weight2=1;
+    float weight0=0.3;
+    float weight1=0.3;
+    float weight2=0.3;
     cvtColor(left,image_left_gray,CV_BGR2GRAY);
     image_left_roi = cv::Mat::zeros(left.rows-2*offsety, right.cols-2*offsetx, CV_8UC1);  // the same size to cost vector's w*h
 	vector<vector<vector<float>>> cost_res; // 三维矩阵  (W-MAX_DISPARITY-offset_x)*(H-2*offsety)*D
@@ -103,14 +110,17 @@ void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::
                     float census_hanming_B=(float_t)cost_obj.census_hanming_dist(CensusLeftB.at<float>(i,j),CensusRightB.at<float>(i,current_right));
                     float census_hanming_G=(float_t)cost_obj.census_hanming_dist(CensusLeftG.at<float>(i,j),CensusRightG.at<float>(i,current_right));
                     float census_hanming_R=(float_t)cost_obj.census_hanming_dist(CensusLeftR.at<float>(i,j),CensusRightR.at<float>(i,current_right));
-                    float dis_B=abs(CensusLeftB.at<float>(i,j)-CensusRightB.at<float>(i,current_right));
-                    float dis_G=abs(CensusLeftB.at<float>(i,j)-CensusRightB.at<float>(i,current_right));
-                    float dis_R=abs(CensusLeftB.at<float>(i,j)-CensusRightB.at<float>(i,current_right));
-                    float Distence_RGB=(0.11*dis_B+0.59*dis_G+0.3*dis_R)/(255);
-                    float Distence_Hanming=(weight0*census_hanming_B+weight1*census_hanming_G+weight2*census_hanming_R)/(3*pow(2,24));
+                    float dis_B=0*abs(CensusLeftB.at<float>(i,j)-CensusRightB.at<float>(i,current_right))+
+                            abs(LeftB.at<u_char>(i,j)-RightB.at<u_char>(i,current_right));
+                    float dis_G=0*abs(CensusLeftG.at<float>(i,j)-CensusRightG.at<float>(i,current_right))+
+                            abs(LeftG.at<u_char>(i,j)-RightG.at<u_char>(i,current_right));
+                    float dis_R=0*abs(CensusLeftR.at<float>(i,j)-CensusRightR.at<float>(i,current_right))+
+                            abs(LeftR.at<u_char>(i,j)-RightR.at<u_char>(i,current_right));
+                    float Distence_RGB=(dis_B+dis_G+dis_R)/(3*256);
+                    float Distence_Hanming=(weight0*census_hanming_B+weight1*census_hanming_G+weight2*census_hanming_R)/(pow(2,24));
                     // the distance of the target points's vector
                     // float diff=dis_sift(desc0[i][j],desc1[i][current_right]);
-                    cost_pix.push_back(Distence_Hanming);   // +diff
+                    cost_pix.push_back(Distence_Hanming+10*Distence_RGB);   // +diff
 				}
 				else{
 				    cost_pix.push_back(FLT_MAX/2);

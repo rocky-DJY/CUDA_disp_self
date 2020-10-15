@@ -8,6 +8,7 @@ census::~census() {
 	//cout << "delete census_obj" << endl;
 }
 void census::census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey) {
+    // 原版
 		int image_height = input_image.rows;
 		int image_width  = input_image.cols;
 		cv::Mat image_src;
@@ -45,9 +46,60 @@ void census::census_transform(const cv::Mat input_image, cv::Mat &modified_image
 			}
 		}
 }
+void census::census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey, float threshold_val) {
+    // 升级版
+    int image_height = input_image.rows;
+    int image_width  = input_image.cols;
+    cv::Mat image_src;
+    // cout<<"image channels: "<<input_image.channels()<<endl;
+    input_image.copyTo(image_src);
+//		cvtColor(input_image,image_src,CV_BGR2GRAY);
+//		cv::namedWindow("GrayImage",0);
+//		cv::resizeWindow("GrayImage",1920/3,1080/3);
+//		cv::imshow("GrayImage",image_src);
+//		cv::waitKey(0);
+//		cv::destroyWindow("GrayImage");
+//		cout<<"destroy:"<<id<<" and the datatype is "<<input_image.type()<<endl;
+    modified_image = cv::Mat::zeros(image_height, image_width, CV_64FC1);  // 64   census result
+    ////////////// census transform /////////////////////
+    int offsetx = (window_sizex - 1) / 2;
+    int offsety = (window_sizey - 1) / 2;
+    for (int j = 0; j < image_width - window_sizex; j++){       // col
+        for (int i = 0; i < image_height - window_sizey; i++){  // row
+            uint64 census = 0u;    // unsigned long
+            uint8_t current_pixel = image_src.at<uint8_t>(i + offsety, j + offsetx); //current pix uchar
+            cv::Rect roi(j, i, window_sizex, window_sizey);     // 窗口矩阵
+            cv::Mat window(image_src, roi);
+            cv::Scalar mean;
+            cv::Scalar stddev;
+            cv::meanStdDev(window,mean,stddev);
+            float mean_pix=mean.val[0];  // 窗口内均值计算
+            for (int a = 0; a < window_sizey; a++){
+                for (int b = 0; b < window_sizex; b++){
+                    if (!(a == offsety && b == offsetx)){    //中心像素不做判断
+                        uint8_t temp_value = window.at<uint8_t>(a, b);
+                        // * 像素值直接比较 * //
+                        census = census << 1;                //比特流右移
+                        if (temp_value < current_pixel){     //小于中心像素则为1
+                            census += 1;
+                        }
+                        //**end**//
+                        //** 与均值比较 **//
+                        census=census<<1;
+                        if(temp_value-mean_pix<threshold_val){
+                            census+=1;
+                        }
+                        //**end**//
+                    }
+                }
+            }
+            modified_image.at<double>(i + offsety, j + offsetx) = census;
+        }
+    }
+}
 unsigned char census::census_hanming_dist(long long PL, long long PR) {
 	// Fast Hamming distance algorithm
-	// number ����0  ����ͬ����census���л���ת���Ĵ���
+	// number
 	unsigned char number = 0;
 	long long v;
 	v = PL ^ PR;            /* ^ ������� ��ͬΪ1 ��ͬΪ0*/
@@ -56,6 +108,7 @@ unsigned char census::census_hanming_dist(long long PL, long long PR) {
 		v &= (v - 1);            /* & ������*/
 		number++;
 	}
+	// printf("%hhu\n",number);
 	return number;
 }
 cost_sift::cost_sift(int id) {
@@ -151,4 +204,44 @@ void cost_sift::sift_transform(const cv::Mat img0,const cv::Mat img1,
 	//cout << keypt0.size().width << endl;
 	//cout << desc0.size().width << endl;
 	//cout << "descriptor generate" << endl;
+}
+WLD::WLD(int id) {
+
+}
+void WLD::WLD_trans(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey) {
+    int image_height = input_image.rows;
+    int image_width  = input_image.cols;
+    cv::Mat image_src;
+    // cout<<"image channels: "<<input_image.channels()<<endl;
+    input_image.copyTo(image_src);
+//		cvtColor(input_image,image_src,CV_BGR2GRAY);
+//		cv::namedWindow("GrayImage",0);
+//		cv::resizeWindow("GrayImage",1920/3,1080/3);
+//		cv::imshow("GrayImage",image_src);
+//		cv::waitKey(0);
+//		cv::destroyWindow("GrayImage");
+//		cout<<"destroy:"<<id<<" and the datatype is "<<input_image.type()<<endl;
+    modified_image = cv::Mat::zeros(image_height, image_width, CV_32FC1);  // 64   census result
+    ////////////// census transform /////////////////////
+    int offsetx = (window_sizex - 1) / 2;
+    int offsety = (window_sizey - 1) / 2;
+    for (int j = 0; j < image_width - window_sizex; j++){       //col
+        for (int i = 0; i < image_height - window_sizey; i++){  //row
+            uint32 WLD_val = 0u;    // unsigned long
+            float_t current_pixel = image_src.at<uint8_t>(i + offsety, j + offsetx);  // center pixel
+            cv::Rect roi(j, i, window_sizex, window_sizey);
+            cv::Mat window(image_src, roi);
+            float_t G_ratio=0;
+            for (int a = 0; a < window_sizey; a++){
+                for (int b = 0; b < window_sizex; b++){
+                    G_ratio+=(window.at<u_char>(a,b)-current_pixel)/current_pixel;
+                }
+            }
+            WLD_val=atan(G_ratio);
+            modified_image.at<float_t>(i + offsety, j + offsetx) = WLD_val;
+        }
+    }
+}
+WLD::~WLD() {
+
 }

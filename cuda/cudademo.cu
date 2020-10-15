@@ -7,8 +7,8 @@
 using namespace std;
 using namespace cv;
 using namespace chrono;
-#define P1_ini 10;
-#define P2_ini 150;
+#define P1_ini 10       // 10
+#define P2_ini 125     // 125
 #define CHECK(res) if(res!=cudaSuccess){exit(-1);}
 __global__ void AggreKeral_left(float *Coss_disp,float *res,uint *image,int rows,int cols,int D)
 {

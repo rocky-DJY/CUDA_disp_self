@@ -10,3 +10,4 @@
 #endif //CUDA_TEST_IMAGE_PROCESS_UTL_H
 void MedianFilter(const float* in, float* out,
         const int32_t& width, const int32_t& height,const int32_t wnd_size);
+float calculate_corss_correlation(float *s1, float *s2,int n);
