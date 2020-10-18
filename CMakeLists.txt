@@ -32,6 +32,6 @@ CUDA_ADD_EXECUTABLE(cuda_test
         opencv/disp_main.cpp opencv/disp_main.h
         opencv/correTest.cpp opencv/dispart_estimate.h
         opencv/image_process_utl.cpp opencv/image_process_utl.h
-        opencv/corre.cpp opencv/corre.h)
+        opencv/corre.cpp opencv/corre.h opencv/computeXYZ.cpp opencv/computeXYZ.h)
 # link lib
 target_link_libraries(cuda_test ${OpenCV_LIBS} ${zed_lib_list})

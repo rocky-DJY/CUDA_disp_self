@@ -1,6 +1,6 @@
 //created by biubiu on 20200803
 #include "disp_main.h"
-
+#include "computeXYZ.h"
 int DispMain() {
 	// Create a ZED camera object
 	sl::Camera zed;
@@ -45,6 +45,27 @@ int DispMain() {
 	sl::Mat image_zed_undistort_right(new_width, new_height, MAT_TYPE::U8_C4);
 	cv::Mat image_ocv_undistort_right= slMat2cvMat(image_zed_undistort_right);
     cv::Mat LEFT_image,RIGHT_image;
+    //********** 相机参数 *********//
+    cv::Mat leftIntrinsic=(cv::Mat_<double>(3,3)<<
+            1399.08 ,    0    , 1120.72,
+               0    , 1399.08 , 688.597,
+               0    ,    0    , 1
+            );
+    cv::Mat rightIntrinsic=(cv::Mat_<double>(3,3)<<
+            1400.84 ,    0    , 1114.24,
+               0    , 1400.84 , 712.094,
+               0    ,    0    , 1
+            );
+    // cv::Mat r_vector=(cv::Mat_<double>(3,1)<<0.0043,-0.0204,-0.0003);
+    cv::Mat rightRotation=(cv::Mat_<double>(3,3)<<
+            1,0,0,
+            0,1,0,
+            0,0,1
+            );
+    // cv::Rodrigues(r_vector,rightRotation);
+    cv::Mat rightTranslation=(cv::Mat_<double>(3,1)<<-120.000,0,0);
+
+    //********* end *************//
 	char key = ' ';
 	int counter=0;
 	while (key!='q') {
@@ -78,8 +99,15 @@ int DispMain() {
                 // 视差计算  create obj to compute disp  set win_size
                 dispart_estimate disp_obj(5,5);  // census win_size w,h
                 cv::Mat disp_Image;
-
-                disp_obj.compute_disp(LEFT_image,RIGHT_image,disp_Image);  //  0
+                cv::Mat disp_map;
+                disp_map=disp_obj.compute_disp(LEFT_image,RIGHT_image,disp_Image);  //返回视差真实值
+                // 点云坐标计算 实例
+                computeXYZ* xyz_obj=new computeXYZ(LEFT_image,leftIntrinsic,rightIntrinsic,rightRotation,rightTranslation);
+                xyz_obj->Disptopixelcorr(disp_map);
+                xyz_obj->allcompute();
+                xyz_obj->Save_xyz_txt("xyz.txt");
+                delete xyz_obj;
+                cout<<"save xyz done!"<<endl;
 //                cv::Mat image_left=cv::imread("/home/maxwell/Downloads/Bicycle1-perfect/im0.png");               //  1
 //                cv::Mat image_right=cv::imread("/home/maxwell/Downloads/Bicycle1-perfect/im1.png");
 //                int scale=2;

@@ -11,7 +11,7 @@ using namespace std;
 class dispart_estimate{
 public:
 	dispart_estimate(const int winsize_x,const int winsize_y);
-	void compute_disp(const cv::Mat src_left,const cv::Mat src_right,cv::Mat &Disp_Result);
+	cv::Mat compute_disp(const cv::Mat src_left,const cv::Mat src_right,cv::Mat &Disp_Result);
 	float dis_sift(const vector<float> Point_desc0,const vector<float> Point_desc1 );
     void ComputeDisparity() const;
     ~dispart_estimate();

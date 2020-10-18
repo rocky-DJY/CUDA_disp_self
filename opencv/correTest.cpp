@@ -3,6 +3,7 @@
 //  this  file to test corre of LR image
 #include "dispart_estimate.h"
 #include "corre.h"
+#include "computeXYZ.h"
 #define MAX_DISPARITY 168
 #define MIN_DISPARITY 10
 int trans_val(const float* res,const float* lags,const int dim){
@@ -63,7 +64,7 @@ float dispart_estimate::dis_sift(const vector<float> Point_desc0, const vector<f
     }
     return pow(diff,0.5);
 }
-void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::Mat &Disp_Result) {
+cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::Mat &Disp_Result) {
     // inout src left and right image   output dispimage
     // census transform
     // new census obj 需要手动释放对象的内存
@@ -274,11 +275,11 @@ void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::
     // 优化视差
     MedianFilter(DispLinerImage,DispLinerImage,left.cols,left.rows,7);   //  the disp result
     // to convert the shape to w*h
-//    for(int i=0;i<left.rows;i++){
-//        for(int j=0;j<left.cols;j++){
-//            disp_map.data[i*left.cols+j]=DispLinerImage[i*left.cols+j];
-//        }
-//    }
+    for(int i=0;i<left.rows;i++){
+        for(int j=0;j<left.cols;j++){
+            disp_map.data[i*left.cols+j]=DispLinerImage[i*left.cols+j];
+        }
+    }
     // 显示视差图
     // 注意，计算点云不能用disp_mat的数据，它是用来显示和保存结果用的。计算点云要用上面的disparity数组里的数据，是子像素浮点数
     float min_disp = left.cols, max_disp = 0;
@@ -319,6 +320,7 @@ void dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::
     delete R_2;
     //////  end ///////
     Disp_Result=this->disp_image;
+    return disp_map;
 }
 void dispart_estimate::ComputeDisparity() const
 {
