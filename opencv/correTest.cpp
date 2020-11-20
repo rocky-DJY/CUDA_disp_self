@@ -3,8 +3,7 @@
 //  this  file to test corre of LR image
 #include "dispart_estimate.h"
 #include "corre.h"
-#include "computeXYZ.h"
-#define MAX_DISPARITY 168
+#define MAX_DISPARITY 233
 #define MIN_DISPARITY 10
 int trans_val(const float* res,const float* lags,const int dim){
     float res_max=res[0];
@@ -20,6 +19,11 @@ int trans_val(const float* res,const float* lags,const int dim){
 constexpr auto Invalid_Float=std::numeric_limits<float>::infinity();
 extern "C" int cuda_main(float *Cost_disp,float *Cost_Agg,const int Rows,const int Cols, const int D_,
                          const uint *left_image_);   // include cuda_main to aggregation
+extern "C" void transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey, float threshold_val);
+extern "C" void cost_cuda_main(vector<vector<vector<float>>> &cost_nums,
+                                double* L_census_R,double* L_census_G,double* L_census_B,
+                                double* R_census_R,double* R_census_G,double* R_census_B,
+                                cv::Mat left,cv::Mat right);
 dispart_estimate::dispart_estimate(const int winsize_x,const int winsize_y) {
     this->winsize_x=winsize_x;  // census transform winsize
     this->winsize_y=winsize_y;
@@ -65,13 +69,15 @@ float dispart_estimate::dis_sift(const vector<float> Point_desc0, const vector<f
     return pow(diff,0.5);
 }
 cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,cv::Mat &Disp_Result) {
-    // inout src left and right image   output dispimage
+    // inout src left and right image output dispimage
     // census transform
     // new census obj 需要手动释放对象的内存
     this->disp_map=cv::Mat::zeros(left.rows,left.cols,CV_32FC1);            // result disp map
     this->disp_image=cv::Mat::zeros(left.rows,left.cols,CV_8UC1);
     this->image_size.width=left.cols;
     this->image_size.height=left.rows;
+    this->rows=left.rows;
+    this->cols=left.cols;
     left.copyTo(this->left);
     right.copyTo(this->right);
     cv::Mat left_RGB[3],right_RGB[3];
@@ -86,26 +92,67 @@ cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,c
     cv::Mat image_left_roi;
     cvtColor(left,image_left_gray,CV_BGR2GRAY);
     image_left_roi = cv::Mat::zeros(left.rows-2*offsety, right.cols-2*offsetx, CV_8UC1);  // the same size to cost vector's w*h
-    vector<vector<vector<float>>> cost_res; // 三维矩阵  (W-MAX_DISPARITY-offset_x)*(H-2*offsety)*D
-    vector<vector<float>> cost_rows;        // 缓存当前行的像素点的 D个视差下的代价
-    vector<float> cost_pix;                 // 缓存当前像素点的D个视差下的代价
+    int m_dim=left.rows-2*offsety;
+    int n_dim=left.cols-2*offsetx;
+    int d_dim=MAX_DISPARITY-MIN_DISPARITY+1;
+    // 三维矩阵  (H-2*offsety)*(W-2*offset_x)*D
+    vector<vector<vector<float>>> cost_res(m_dim,vector<vector<float>>(n_dim,vector<float>(d_dim,0)));
+//    vector<vector<float>> cost_rows;          // 缓存当前行的像素点的 D个视差下的代价
+//    vector<float> cost_pix;                   // 缓存当前像素点的D个视差下的代价
+//    cost_pix.resize(MAX_DISPARITY-MIN_DISPARITY+1);
     float *L_0 =new float[left.cols];       // 0:B 1:G 2:R
     float *R_0 =new float[left.cols];
     float *L_1 =new float[left.cols];
     float *R_1 =new float[left.cols];
     float *L_2 =new float[left.cols];
     float *R_2 =new float[left.cols];
-    //////////////** census transform **//////////////////
-    census left_census(0);
-    census right_census(1);
-    float threshold_val=1.8;
-    left_census.census_transform(left_RGB[0],CensusLeftB,winsize_x,winsize_y,threshold_val);
-    left_census.census_transform(left_RGB[1],CensusLeftG,winsize_x,winsize_y,threshold_val);
-    left_census.census_transform(left_RGB[2],CensusLeftR,winsize_x,winsize_y,threshold_val);
-    right_census.census_transform(right_RGB[0],CensusRightB,winsize_x,winsize_y,threshold_val);
-    right_census.census_transform(right_RGB[1],CensusRightG,winsize_x,winsize_y,threshold_val);
-    right_census.census_transform(right_RGB[2],CensusRightR,winsize_x,winsize_y,threshold_val);
+    double* left_census_R= (double *)malloc(sizeof(double) * rows * cols);
+    double* left_census_G= (double *)malloc(sizeof(double) * rows * cols);
+    double* left_census_B= (double *)malloc(sizeof(double) * rows * cols);
+    double* right_census_R= (double *)malloc(sizeof(double) * rows * cols);
+    double* right_census_G= (double *)malloc(sizeof(double) * rows * cols);
+    double* right_census_B= (double *)malloc(sizeof(double) * rows * cols);
+    //////////////** census transform **////////////////
+//    census left_census(0);
+//    census right_census(1);
+//    float threshold_val=5.6;  // 1.8
+//    auto start0=system_clock::now();
+//    left_census.census_transform(left_RGB[0],CensusLeftB,winsize_x,winsize_y,threshold_val);
+//    left_census.census_transform(left_RGB[1],CensusLeftG,winsize_x,winsize_y,threshold_val);
+//    left_census.census_transform(left_RGB[2],CensusLeftR,winsize_x,winsize_y,threshold_val);
+//    right_census.census_transform(right_RGB[0],CensusRightB,winsize_x,winsize_y,threshold_val);
+//    right_census.census_transform(right_RGB[1],CensusRightG,winsize_x,winsize_y,threshold_val);
+//    right_census.census_transform(right_RGB[2],CensusRightR,winsize_x,winsize_y,threshold_val);
+//    auto last0=system_clock::now();
+//    auto duration0=duration_cast<microseconds>(last0-start0);
+//    cout<<"census_cpu total time: "<<double(duration0.count())*microseconds::period::num/microseconds::period::den<<endl;
+    /////////////cuda census//////////////
+    float threshold_val=1.8;  // 1.8
+    auto start=system_clock::now();
+    transform(left_RGB[0],CensusLeftB,winsize_x,winsize_y,threshold_val);
+    transform(left_RGB[1],CensusLeftG,winsize_x,winsize_y,threshold_val);
+    transform(left_RGB[2],CensusLeftR,winsize_x,winsize_y,threshold_val);
+    transform(right_RGB[0],CensusRightB,winsize_x,winsize_y,threshold_val);
+    transform(right_RGB[1],CensusRightG,winsize_x,winsize_y,threshold_val);
+    transform(right_RGB[2],CensusRightR,winsize_x,winsize_y,threshold_val);
+    auto last=system_clock::now();
+    auto duration=duration_cast<microseconds>(last-start);
+    cout<<"census_cuda total time: "<<double(duration.count())*microseconds::period::num/microseconds::period::den<<endl;
     //////////////** end **//////////////////
+    ///////*****data flat****////////////////
+    int _index=0;
+    for(int i=0;i<rows;i++){
+        for(int j=0;j<cols;j++){
+            left_census_B[_index]=CensusLeftB.at<double>(i,j);
+            left_census_G[_index]=CensusLeftG.at<double>(i,j);
+            left_census_R[_index]=CensusLeftR.at<double>(i,j);
+            right_census_B[_index]=CensusRightB.at<double>(i,j);
+            right_census_G[_index]=CensusRightG.at<double>(i,j);
+            right_census_R[_index]=CensusRightR.at<double>(i,j);
+            _index++;
+        }
+    }
+    ///////*****end*****/////////////////////
     //////////////**********************/////////////////////////////
     int len=11;   //odd number must
     //////////////**********************/////////////////////////////
@@ -118,135 +165,24 @@ cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,c
     float *CO_weight =new float[3];
     float *CT_weight =new float[3];
     float uni_size=255;
-    for (int i = offsety,image_y=0; i < left.rows-offsety; i++,image_y++) { // row index
-        // first get the one row image data
-        for(int T=0;T<left.cols;T++){
-            L_0[T]= (float)left_RGB[0].at<u_char>(i,T)/uni_size;
-            R_0[T]= (float)right_RGB[0].at<u_char>(i,T)/uni_size;
-            L_1[T]= (float)left_RGB[1].at<u_char>(i,T)/uni_size;
-            R_1[T]= (float)right_RGB[1].at<u_char>(i,T)/uni_size;
-            L_2[T]= (float)left_RGB[2].at<u_char>(i,T)/uni_size;
-            R_2[T]= (float)right_RGB[2].at<u_char>(i,T)/uni_size;
-        }
-        //plot(L,"Ldata",cv::Size(1920,256),4);
-        //plot(R,"Rdata",cv::Size(1920,256),4);
-        for (int j = offsetx,image_x=0; j < left.cols-offsetx; j++,image_x++) {  // col index
+    vector<float> nums1;
+    vector<float> nums2;
+    int image_y,image_x;  // the ROI point index
+    ////***  cuda   cost compute ****//////////
+    auto _start=system_clock::now();
+    cost_cuda_main(cost_res,left_census_R,left_census_G,left_census_B,right_census_R,right_census_G,right_census_B,this->left,this->right);
+    auto _last=system_clock::now();
+    auto _duration=duration_cast<microseconds>(_last-_start);
+    cout<<"cost_cuda total time: "<<double(_duration.count())*microseconds::period::num/microseconds::period::den<<endl;
+    ////////**** end ****//////////////
+    for (int i = this->offsety; i < left.rows-offsety; i++) { // row index
+        image_y=i-offsety;
+        for (int j = offsetx; j < left.cols-offsetx; j++) {  // col index
+            image_x=j-offsetx;
             image_left_roi.at<u_char>(image_y,image_x)=image_left_gray.at<u_char>(i,j);
-            //  get the left block data
-            for(int front_index=j,back_index=j,front=(int)len/2,back=(int)len/2;back_index>=j-len/2;front_index++,back_index--){
-                if(front_index>left.cols-1){
-                    temp_L_0[front]=0.0000f;
-                    temp_L_1[front]=0.0000f;
-                    temp_L_2[front]=0.0000f;
-                    front++;
-                }
-                else {
-                    temp_L_0[front]=L_0[front_index];
-                    temp_L_1[front]=L_1[front_index];
-                    temp_L_2[front]=L_2[front_index];
-                    front++;
-                }
-                if(back_index<0){
-                    temp_L_0[back]=0.0000f;
-                    temp_L_1[back]=0.0000f;
-                    temp_L_2[back]=0.0000f;
-                    back--;
-                }
-                else {
-                    temp_L_0[back] = L_0[back_index];
-                    temp_L_1[back] = L_1[back_index];
-                    temp_L_2[back] = L_2[back_index];
-                    back--;
-                }
-            }
-            // plot(temp_L,"L_temp",cv::Size(len,256),1);
-            for (int m = MIN_DISPARITY; m <=MAX_DISPARITY; m++) {
-                int current_right = j-m;
-                if(current_right>=offsetx){
-                    // get the right block data
-                    for(int front_index=current_right,back_index=current_right,front=(int)len/2,back=(int)len/2;
-                        back_index>=current_right-len/2;front_index++,back_index--){
-                        if(front_index>left.cols-1){
-                            temp_R_0[front]=0.0000f;
-                            temp_R_1[front]=0.0000f;
-                            temp_R_2[front]=0.0000f;
-                            front++;
-                        }
-                        else {
-                            temp_R_0[front]=R_0[front_index];
-                            temp_R_1[front]=R_1[front_index];
-                            temp_R_2[front]=R_2[front_index];
-                            front++;
-                        }
-                        if(back_index<0){
-                            temp_R_0[back]=0.0000f;
-                            temp_R_1[back]=0.0000f;
-                            temp_R_2[back]=0.0000f;
-                            back--;
-                        }
-                        else{
-                            temp_R_0[back]=R_0[back_index];
-                            temp_R_1[back]=R_1[back_index];
-                            temp_R_2[back]=R_2[back_index];
-                            back--;
-                        }
-                        // cout<<"front: "<<front<<" back: "<<back<<"   len: "<<len<<endl;
-                    }
-                    // plot(temp_R,"R_temp",cv::Size(len,256),1);
-                    // corre(temp_L,temp_R,res,lags,len);
-                    // int curr_trans_val=trans_val(res,lags,len);
-                    // the disstence of the  two arrays trans val and assuming trans;
-                    float diss0=abs(calculate_corss_correlation(temp_L_0,temp_R_0,len));  // 数值越大表示代价越小
-                    float diss1=abs(calculate_corss_correlation(temp_L_1,temp_R_1,len));
-                    float diss2=abs(calculate_corss_correlation(temp_L_2,temp_R_2,len));
-                    float aver_corr=(diss0+diss1+diss2)/3;
-                    float sum_abs_co=abs(diss0-aver_corr)+abs(diss1-aver_corr)+abs(diss2-aver_corr);
-                    if(sum_abs_co!=0){
-                        CO_weight[0]=abs(diss0-aver_corr)/sum_abs_co;
-                        CO_weight[1]=abs(diss1-aver_corr)/sum_abs_co;
-                        CO_weight[2]=abs(diss2-aver_corr)/sum_abs_co;
-                    }
-                    else{
-                        CO_weight[0]=0.3;
-                        CO_weight[1]=0.3;
-                        CO_weight[2]=0.3;
-                    }
-                    // 计算不同视差下的 sensus 距离
-                    //float hi=(float_t)left_census.census_hanming_dist(CensusLeftB.at<double>(i,j),CensusRightB.at<double>(i,current_right));
-                    float census_hanming_B=1/(float_t)left_census.census_hanming_dist(CensusLeftB.at<double>(i,j),CensusRightB.at<double>(i,current_right));
-                    float census_hanming_G=1/(float_t)left_census.census_hanming_dist(CensusLeftG.at<double>(i,j),CensusRightG.at<double>(i,current_right));
-                    float census_hanming_R=1/(float_t)left_census.census_hanming_dist(CensusLeftR.at<double>(i,j),CensusRightR.at<double>(i,current_right));
-                    float aver_census=(census_hanming_B+census_hanming_G+census_hanming_R)/3;
-                    float sum_abs_census=abs(census_hanming_B-aver_census)+abs(census_hanming_G-aver_census)+abs(census_hanming_R-aver_census);
-                    if(sum_abs_census!=0){
-                        CT_weight[0]=abs(census_hanming_B-aver_census)/sum_abs_census;
-                        CT_weight[1]=abs(census_hanming_G-aver_census)/sum_abs_census;
-                        CT_weight[2]=abs(census_hanming_R-aver_census)/sum_abs_census;
-                    }
-                    else{
-                        CT_weight[0]=0.3;
-                        CT_weight[1]=0.3;
-                        CT_weight[2]=0.3;
-                    }
-                    float diss_corr=CO_weight[0]/diss0+CO_weight[1]/diss1+CO_weight[2]/diss2;
-                    float diss_ct=CT_weight[0]/census_hanming_B+CT_weight[1]/census_hanming_G+CT_weight[2]/census_hanming_R;
-                    float diss=0.05*diss_corr+0.5*diss_ct;
-                    // printf("diss : %f \n",diss);
-                    if(isnan(diss))
-                        cost_pix.push_back(FLT_MAX/2);
-                    else
-                        cost_pix.push_back(diss);
-                }
-                else{
-                    cost_pix.push_back(FLT_MAX/2);
-                }
-            }
-            cost_rows.push_back(cost_pix);
-            cost_pix.clear();
         }
-        cost_res.push_back(cost_rows);
-        cost_rows.clear();
     }
+
     cout<<"cost_ini mat size: "<<cost_res.size()<<",  "<<cost_res[0].size()<<",  "<<cost_res[0][0].size()<<endl;
     int rows=cost_res.size();     // cost_disp  first index
     int cols=cost_res[0].size();  // second
@@ -274,12 +210,6 @@ cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,c
     ComputeDisparity();
     // 优化视差
     MedianFilter(DispLinerImage,DispLinerImage,left.cols,left.rows,7);   //  the disp result
-    // to convert the shape to w*h
-    for(int i=0;i<left.rows;i++){
-        for(int j=0;j<left.cols;j++){
-            disp_map.data[i*left.cols+j]=DispLinerImage[i*left.cols+j];
-        }
-    }
     // 显示视差图
     // 注意，计算点云不能用disp_mat的数据，它是用来显示和保存结果用的。计算点云要用上面的disparity数组里的数据，是子像素浮点数
     float min_disp = left.cols, max_disp = 0;
@@ -297,9 +227,11 @@ cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,c
             float disp = DispLinerImage[i * left.cols + j];
             if (disp == Invalid_Float) {
                 disp_image.at<uchar>(i,j) = 0;
+                disp_map.at<float>(i,j)=0;
             }
             else {
                 disp_image.at<uchar>(i,j) = static_cast<uchar>((disp - min_disp) / (max_disp - min_disp) * 255);
+                disp_map.at<float>(i,j)=disp;
             }
         }
     }
@@ -318,6 +250,12 @@ cv::Mat dispart_estimate::compute_disp(const cv::Mat left, const cv::Mat right,c
     delete R_0;
     delete R_1;
     delete R_2;
+    free(left_census_B);
+    free(left_census_G);
+    free(left_census_R);
+    free(right_census_B);
+    free(right_census_G);
+    free(right_census_R);
     //////  end ///////
     Disp_Result=this->disp_image;
     return disp_map;

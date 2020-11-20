@@ -8,7 +8,7 @@ census::~census() {
 	//cout << "delete census_obj" << endl;
 }
 void census::census_transform(const cv::Mat input_image, cv::Mat &modified_image, int window_sizex, int window_sizey) {
-    // 原版
+        // 原版
 		int image_height = input_image.rows;
 		int image_width  = input_image.cols;
 		cv::Mat image_src;
@@ -102,10 +102,10 @@ unsigned char census::census_hanming_dist(long long PL, long long PR) {
 	// number
 	unsigned char number = 0;
 	long long v;
-	v = PL ^ PR;            /* ^ ������� ��ͬΪ1 ��ͬΪ0*/
+	v = PL ^ PR;          // 位与  计算非零的个数
 	while (v)
 	{
-		v &= (v - 1);            /* & ������*/
+		v &= (v - 1);
 		number++;
 	}
 	// printf("%hhu\n",number);

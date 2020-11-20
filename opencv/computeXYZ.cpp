@@ -1,6 +1,4 @@
-//
 // Created by maxwell on 10/16/20.
-//
 #include "computeXYZ.h"
 using namespace std;
 //using namespace cv;
@@ -81,28 +79,61 @@ cv::Mat computeXYZ::compute(cv::Point2d uvLeft, cv::Point2d uvRight)
     return XYZ;
 }
 void computeXYZ::Disptopixelcorr(cv::Mat DispMap){
-    // 去除边框
-    int boundry_size=100;
-    int cols_size=DispMap.cols-boundry_size;
-    int rows_size=DispMap.cols-boundry_size;
-    // 左视图为base
-    for(int index_row=boundry_size;index_row<rows_size-boundry_size;index_row++){
-        // 图像行指针
-        const uchar* row_ptr=DispMap.ptr<uchar>(index_row);
-        for(int index_col=boundry_size;index_col<cols_size-boundry_size;index_col++){
-            cv::Point2d left_temp,right_temp;
-            left_temp.x=index_col;
-            left_temp.y=index_row;
-            // 列值索引取出视差
-            right_temp.x=(double)(index_col-row_ptr[index_col]);
-            right_temp.y=index_row;
-            pixels_left.push_back(left_temp);
-            pixels_right.push_back(right_temp);
-            // cout<<"left: "<<left_temp<<"  "<<"right: "<<right_temp<<endl;
+    // face box  find
+    std::vector<cv::Rect> faces;
+    faces=FaceRect_Find(image_left);
+    // imshow face
+    cout<<"Find "<<faces.size()<<" faces "<<endl;
+//    for(int i=0;i<faces.size();i++){
+//        cv::Rect face=faces[i];
+//        // roi get and reconstruct
+//        int boundry_size_row=face.y;  // start point
+//        int boundry_size_col=face.x;
+//        int cols_size=face.x+face.width;
+//        int rows_size=face.y+face.height;
+//        // 左视图为base
+//        for(int index_row=boundry_size_row;index_row<rows_size;index_row++){
+//            // 图像行指针
+//            const uchar* row_ptr=DispMap.ptr<uchar>(index_row);
+//            for(int index_col=boundry_size_col;index_col<cols_size;index_col++){
+//                cv::Point2d left_temp,right_temp;
+//                left_temp.x=index_col;
+//                left_temp.y=index_row;
+//                // 列值索引取出视差
+//                right_temp.x=(double)(index_col-row_ptr[index_col]);
+//                right_temp.y=index_row;
+//                pixels_left.push_back(left_temp);
+//                pixels_right.push_back(right_temp);
+//                // cout<<"left: "<<left_temp<<"  "<<"right: "<<right_temp<<endl;
+//            }
+//        }
+//    }
+    for(int i=0;i<1;i++){
+        // roi get and reconstruct
+        int boundry_size_row=426;  // start point
+        int boundry_size_col=625;
+        int cols_size=989;
+        int rows_size=802;
+        // 左视图为base
+        for(int index_row=boundry_size_row;index_row<rows_size;index_row++){
+            // 图像行指针
+            // const uchar* row_ptr=DispMap.ptr<uchar>(index_row);
+            for(int index_col=boundry_size_col;index_col<cols_size;index_col++){
+                cv::Point2d left_temp,right_temp;
+                left_temp.x=index_col;
+                left_temp.y=index_row;
+                // 列值索引取出视差
+                right_temp.x=(double)(index_col-DispMap.at<float>(index_row,index_col));
+                right_temp.y=index_row;
+                pixels_left.push_back(left_temp);
+                pixels_right.push_back(right_temp);
+                // cout<<"left: "<<left_temp<<"  "<<"right: "<<right_temp<<endl;
+            }
         }
     }
 }
 void computeXYZ::allcompute(){
+    // cout<<"pixel size: "<<pixels_left.size()<<endl;
     for(int i=0;i<pixels_left.size();i++){
         cv::Point3d xyztemp;
         cv::Point3d rgbtemp;
@@ -123,6 +154,8 @@ void computeXYZ::Save_xyz_txt(const char* filename) {
     FILE* fp=fopen(filename,"w");
     int len=world_xyz.size();
     for(int i=0;i<len;i++){
+        if(world_xyz[i].z<0)
+            continue;
         fprintf(fp,"%lf;%lf;%lf;%lf;%lf;%lf\n",world_xyz[i].x,world_xyz[i].y,world_xyz[i].z,world_rgb[i].x,world_rgb[i].y,world_rgb[i].z);
     }
     fclose(fp);

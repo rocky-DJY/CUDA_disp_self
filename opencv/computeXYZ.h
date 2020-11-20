@@ -13,6 +13,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <vector>
+#include "image_process_utl.h"
 using namespace std;
 class computeXYZ {
 public:
@@ -36,6 +37,5 @@ private:
     //**end**//
     cv::Mat rightIntrinsic, rightRotation, rightTranslation;  //  构造时 传递
 };
-
 
 #endif //CUDA_TEST_COMPUTEXYZ_H

@@ -308,7 +308,7 @@ extern "C" int cuda_main( float *cost_disp,float *cost_agg,const int rows,const 
     cout<<"enter cuda keral..."<<endl;
     //cout<<"size: "<<rows<<","<<cols<<","<<D<<endl;
     ////////////////////  data init //////////////////////////////
-    float *f_1     = (float*)malloc(rows*cols * D * sizeof(float*));
+    float *f_1      = (float*)malloc(rows*cols * D * sizeof(float*));
     uint  *image    = (uint*)malloc(rows*cols * sizeof(uint*));
     float *d_1;
     float *d_res_1;

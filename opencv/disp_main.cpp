@@ -1,6 +1,7 @@
 //created by biubiu on 20200803
 #include "disp_main.h"
 #include "computeXYZ.h"
+#include "read.h"
 int DispMain() {
 	// Create a ZED camera object
 	sl::Camera zed;
@@ -46,93 +47,117 @@ int DispMain() {
 	cv::Mat image_ocv_undistort_right= slMat2cvMat(image_zed_undistort_right);
     cv::Mat LEFT_image,RIGHT_image;
     //********** 相机参数 *********//
-    cv::Mat leftIntrinsic=(cv::Mat_<double>(3,3)<<
-            1399.08 ,    0    , 1120.72,
-               0    , 1399.08 , 688.597,
-               0    ,    0    , 1
-            );
-    cv::Mat rightIntrinsic=(cv::Mat_<double>(3,3)<<
-            1400.84 ,    0    , 1114.24,
-               0    , 1400.84 , 712.094,
-               0    ,    0    , 1
-            );
-    // cv::Mat r_vector=(cv::Mat_<double>(3,1)<<0.0043,-0.0204,-0.0003);
-    cv::Mat rightRotation=(cv::Mat_<double>(3,3)<<
-            1,0,0,
-            0,1,0,
-            0,0,1
-            );
+    cv::Mat leftIntrinsic=cv::Mat_<double>(3,3);
+    cv::Mat rightIntrinsic=cv::Mat_<double>(3,3);
+    cv::Mat rightRotation=(cv::Mat_<double>(3,3)<<1,0,0,0,1,0,0,0,1);
+    cv::Mat rightTranslation=(cv::Mat_<double>(3,1)<<-120,0,0);
+    //read//
+    double *p;
+    string path = "interc1.txt";
+    p = get_para(path);
+    int n = 0;
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+        {
+            leftIntrinsic.at<double>(i, j) = *(p + n);
+            n++;
+        }
+    path = "interc2.txt";
+    p = get_para(path);
+    n = 0;
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+        {
+            rightIntrinsic.at<double>(i, j) = *(p + n);
+            n++;
+        }
+//    path = "R.txt";
+//    p = get_para(path);
+//    n = 0;
+//    for (int i = 0; i < 3; i++)
+//        for (int j = 0; j < 3; j++)
+//        {
+//            rightRotation.at<double>(i, j) = *(p + n);
+//            n++;
+//        }
+//    path="T.txt";
+//    p=get_para(path);
+//    n=0;
+//    for (int i = 0; i < 3; i++){
+//        rightTranslation.at<double>(i) = *(p + n);
+//        n++;
+//    }
+    cout<<"left: \n"<<leftIntrinsic<<endl;
+    cout<<"right: \n"<<rightIntrinsic<<endl;
+    cout<<"R: \n"<<rightRotation<<endl;
+    cout<<"T: \n"<<rightTranslation<<endl;
+    //**end**//
     // cv::Rodrigues(r_vector,rightRotation);
-    cv::Mat rightTranslation=(cv::Mat_<double>(3,1)<<-120.000,0,0);
-
+    // cv::invert(rightRotation,R_temp,cv::DECOMP_LU);
+    // rightRotation=R_temp;
     //********* end *************//
 	char key = ' ';
-	int counter=0;
+	cout<<" command here..."<<endl;
 	while (key!='q') {
-	    if(counter<20&zed.grab(runtime_parameters) == ERROR_CODE::SUCCESS){
+        if (zed.grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
             // Retrieve the left image, depth image in half-resolution
-            zed.retrieveImage(image_zed_undistort_left, VIEW::LEFT, MEM::CPU, new_image_size);
+            zed.retrieveImage(image_zed_undistort_left,  VIEW::LEFT,  MEM::CPU, new_image_size);
             zed.retrieveImage(image_zed_undistort_right, VIEW::RIGHT, MEM::CPU, new_image_size);
-	        counter++;
-	    }
-	    else{
-            if (zed.grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
-                // Retrieve the left image, depth image in half-resolution
-                zed.retrieveImage(image_zed_undistort_left,  VIEW::LEFT,  MEM::CPU, new_image_size);
-                zed.retrieveImage(image_zed_undistort_right, VIEW::RIGHT, MEM::CPU, new_image_size);
-                cv::cvtColor(image_ocv_undistort_left,LEFT_image,CV_BGRA2BGR);
-                // cv::cvtColor(image_ocv_undistort_left,image_ocv_undistort_left,CV_BGR2HSV);
-                cv::cvtColor(image_ocv_undistort_right,RIGHT_image,CV_BGRA2BGR);
-                // cv::cvtColor(image_ocv_undistort_right,image_ocv_undistort_right,CV_BGR2HSV);
-                // cout << point_cloud.getWidth() << "," << point_cloud.getHeight() << endl;
-                // Display image and depth using cv:Mat which share sl:Mat data
-                cv::namedWindow("Image_left",0);
-                cv::resizeWindow("Image_left",(int)1920/3,(int)1080/3);
-                cv::imshow("Image_left", LEFT_image);
-                cv::imwrite("LeftImage.bmp",LEFT_image);   // write
-
-                cv::namedWindow("Image_right",0);
-                cv::resizeWindow("Image_right",(int)1920/3,(int)1080/3);
-                cv::imshow("Image_right",RIGHT_image);
-                cv::imwrite("RightImage.bmp",RIGHT_image);   // write
-                cvWaitKey(1500);
+            cv::cvtColor(image_ocv_undistort_left,LEFT_image,CV_BGRA2BGR);
+            // cv::cvtColor(image_ocv_undistort_left,image_ocv_undistort_left,CV_BGR2HSV);
+            cv::cvtColor(image_ocv_undistort_right,RIGHT_image,CV_BGRA2BGR);
+            // *************** 可注释 *****************   //
+            //LEFT_image=cv::imread("/home/maxwell/DJY/ZEDimage/L/12.bmp");
+            //RIGHT_image=cv::imread("/home/maxwell/DJY/ZEDimage/R/12.bmp");
+            // ***************  end ******************   //
+            // Display image and depth using cv:Mat which share sl:Mat data
+            int boundry_size_row=426;  // start point
+            int boundry_size_col=625;
+            int cols_size=989;
+            int rows_size=802;
+            // append
+            cv::Mat image_append;
+            // add rectangle
+            cv::Mat left_add_rect;
+            LEFT_image.copyTo(left_add_rect);
+            cv::Rect target_roi;
+            target_roi.x=boundry_size_col;
+            target_roi.y=boundry_size_row;
+            target_roi.width=cols_size-boundry_size_col;
+            target_roi.height=rows_size-boundry_size_row;
+            cv::rectangle(left_add_rect,target_roi,cv::Scalar(0,0,255),3,1,0);
+            cv::hconcat(left_add_rect,RIGHT_image,image_append); // 拼接左右图片
+            cv::namedWindow("Image",0);
+            int scale=3;
+            cv::resizeWindow("Image",(int)LEFT_image.size().width*2/scale,(int)LEFT_image.size().height/scale);
+            cv::imshow("Image",image_append);
+            // cv::imwrite("Image.bmp",image_append);   // write
+            key=cvWaitKey(100);
+            if(key=='p') {
+                cout<<"enter 3D reconstruct"<<endl;
                 // 视差计算  create obj to compute disp  set win_size
-                dispart_estimate disp_obj(5,5);  // census win_size w,h
-                cv::Mat disp_Image;
-                cv::Mat disp_map;
-                disp_map=disp_obj.compute_disp(LEFT_image,RIGHT_image,disp_Image);  //返回视差真实值
-                // 点云坐标计算 实例
-                computeXYZ* xyz_obj=new computeXYZ(LEFT_image,leftIntrinsic,rightIntrinsic,rightRotation,rightTranslation);
+                dispart_estimate disp_obj(5, 5);  // census win_size w,h
+                cv::Mat disp_Image; // use to show   8U
+                cv::Mat disp_map;   // true diaprity
+                disp_map = disp_obj.compute_disp(LEFT_image, RIGHT_image, disp_Image);  //返回视差真实值
+                // 点云坐标计算
+                computeXYZ *xyz_obj = new computeXYZ(LEFT_image, leftIntrinsic, rightIntrinsic, rightRotation,
+                                                     rightTranslation);
                 xyz_obj->Disptopixelcorr(disp_map);
                 xyz_obj->allcompute();
                 xyz_obj->Save_xyz_txt("xyz.txt");
                 delete xyz_obj;
-                cout<<"save xyz done!"<<endl;
-//                cv::Mat image_left=cv::imread("/home/maxwell/Downloads/Bicycle1-perfect/im0.png");               //  1
-//                cv::Mat image_right=cv::imread("/home/maxwell/Downloads/Bicycle1-perfect/im1.png");
-//                int scale=2;
-//                cv::resize(image_left,image_left,cv::Size((int)image_left.cols/scale,(int)image_left.rows/scale));
-//                cv::resize(image_right,image_right,cv::Size((int)image_right.cols/scale,(int)image_right.rows/scale));
-//                disp_obj.compute_disp(image_left,image_right,disp_Image);
-
-                cv::namedWindow("Disp_image",0);
-                cv::resizeWindow("Disp_image",(int)disp_Image.cols/3,(int)disp_Image.rows/3);
-                cv::imshow("Disp_image",disp_Image);
-                cv::waitKey(0);
+                cout << "save xyz done!" << endl;
+                cv::namedWindow("Disp_image", 0);
+                cv::resizeWindow("Disp_image", (int) disp_Image.cols / 3, (int) disp_Image.rows / 3);
+                cv::imshow("Disp_image", disp_Image);
+                key=cv::waitKey(0);
                 cv::destroyWindow("Disp_image");
-                cv::imwrite("disp_unagg.bmp",disp_Image);
-                cout<<"disp done enter the key order... q: exit n: continue"<<endl;
-                // Handle key event
-                while(true){
-                    key = cv::waitKey(10);
-                    if(key=='q')  // exit
-                        break;
-                    if(key=='n')  // continue;
-                        break;
-                }
+                cv::imwrite("disp_agg.bmp", disp_Image);
             }
-		}
+        }
 	}
+	cout<<"leave......"<<endl;
 	zed.close();
 	return 1;
 }

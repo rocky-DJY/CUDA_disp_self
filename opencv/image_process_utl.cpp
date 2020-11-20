@@ -84,3 +84,12 @@ float calculate_corss_correlation(float *s1, float *s2,int n)
    // printf("pre : %f pxy %f\n",n*sum_s12-sum_s1*sum_s2,pxy);
     return (float_t)pxy;
 }
+std::vector<cv::Rect> FaceRect_Find(cv::Mat srcImage){
+    cv::CascadeClassifier face_cascade;
+    face_cascade.load("/home/maxwell/DJY/opencv3411/release/share/OpenCV/haarcascades/haarcascade_frontalface_default.xml");
+    std::vector<cv::Rect> faces;
+    cv::Mat frame_gray;
+    cv::cvtColor(srcImage,frame_gray,cv::COLOR_BGR2GRAY);
+    face_cascade.detectMultiScale(frame_gray,faces,1.1,3,CV_HAAR_DO_ROUGH_SEARCH,cv::Size(60,60),cv::Size(1000,1000));
+    return faces;
+}

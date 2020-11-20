@@ -4,10 +4,12 @@
 #include "feature_descript.h"
 #include <vector>
 #include "image_process_utl.h"
+#include <chrono>
 typedef int32_t sint32;
 // this file include the disparity computer
 // call the function named computer_disp to return the disprity map
 using namespace std;
+using namespace chrono;
 class dispart_estimate{
 public:
 	dispart_estimate(const int winsize_x,const int winsize_y);
